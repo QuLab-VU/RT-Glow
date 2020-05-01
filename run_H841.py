@@ -111,6 +111,12 @@ static_log_cells = [m.log2(x) for x in static_cells_mean]
 #plt.show()
 
 slope_static, intercept_static, r_static, p_static, std_static = stats.linregress(range(len(static_log_cells)),static_log_cells)
+
+#plt.plot(range(len(static_log_cells)), static_log_cells, 'x')
+#plt.plot(range(len(static_log_cells)), intercept_static+range(len(static_log_cells))*slope_static)
+#plt.show()
+#exit()
+
 #print(slope_static, r_static)
 #exit()
 
@@ -156,15 +162,24 @@ def obj_static(position):
     param_values[rate_mask] = 10 ** position.copy()
 
     lum_ct = []
-    for i in static_initial_ct:
-        traj = solver.run(param_values=param_values, initials={model.species[init_cell]: i}, tspan=[0, 0.5])
-        lum_ct.append(traj.expressions['Luminescence'][1])
-    #print('lum_ct', lum_ct)
+    rev = [x for x in reversed(static_initial_ct)]
+    #print(rev)
+    #exit()
+    tspan = np.linspace(0, 0.5, 100)
+    for i in rev:
+        #print("i: ",i)
+        traj = solver.run(param_values=param_values, initials={model.species[init_cell]: i}, tspan=tspan)
+        #plt.figure()
+        #plt.plot(tspan, traj.expressions['Luminescence'])
+        lum_ct.append(traj.expressions['Luminescence'][-1])
+    #plt.plot(rev,lum_ct, 'x')
+    #plt.show()
     #exit()
     slope_sim, intercept_sim, r_sim, p_sim, std_sim = stats.linregress(range(len(lum_ct)),lum_ct)
 
-    err = (slope_static - slope_sim)**2 + (r_static - r_sim)**2
-    return sqrt(err)
+    return (slope_static - slope_sim)**2
+    #err = (slope_static - slope_sim)**2 #+ (r_static - r_sim)**2
+    #return sqrt(err)
 
 
 #--------functions for the dynamic cell data---------------
@@ -177,80 +192,100 @@ def obj_DMSO(position):
     #exit()
     traj = solver.run(param_values=param_values, initials={model.species[drug_idx]: 0}, tspan=tdata_DMSO)
     lum_traj = traj.expressions['Luminescence']
-    err = np.sum((exp_data_DMSO - lum_traj) **2)
-    return sqrt(err)
+
+    return np.sum((exp_data_DMSO - lum_traj) **2)
+    #err = np.sum((exp_data_DMSO - lum_traj) **2)
+    #return sqrt(err)
 
 def obj_10uM(position):
     param_values[rate_mask] = 10 ** position.copy()
     #param_values[14] = 10.0e-6*N_A*80e-6
     traj = solver.run(param_values=param_values, initials={model.species[drug_idx]: 10.0e-6*N_A*80e-6}, tspan=tdata_drug)
     lum_traj = traj.expressions['Luminescence']
-    err = np.sum((exp_data_10uM - lum_traj) **2)
-    return sqrt(err)
+
+    return np.sum((exp_data_10uM - lum_traj) **2)
+    #err = np.sum((exp_data_10uM - lum_traj) **2)
+    #return sqrt(err)
 
 def obj_2_5uM(position):
     param_values[rate_mask] = 10 ** position.copy()
     #param_values[14] = 2.5e-6*N_A*80e-6
     traj = solver.run(param_values=param_values, initials={model.species[drug_idx]: 2.5e-6*N_A*80e-6}, tspan=tdata_drug)
     lum_traj = traj.expressions['Luminescence']
-    err = np.sum((exp_data_2_5uM - lum_traj) **2)
-    return sqrt(err)
+
+    return np.sum((exp_data_2_5uM - lum_traj) **2)
+    #err = np.sum((exp_data_2_5uM - lum_traj) **2)
+    #return sqrt(err)
 
 def obj_625nM(position):
     param_values[rate_mask] = 10 ** position.copy()
     #param_values[14] = 625e-9*N_A*80e-6
     traj = solver.run(param_values=param_values, initials={model.species[drug_idx]: 625e-9*N_A*80e-6}, tspan=tdata_drug)
     lum_traj = traj.expressions['Luminescence']
-    err = np.sum((exp_data_625nM - lum_traj) **2)
-    return sqrt(err)
+
+    return np.sum((exp_data_625nM - lum_traj) **2)
+    #err = np.sum((exp_data_625nM - lum_traj) **2)
+    #return sqrt(err)
 
 def obj_156_25nM(position):
     param_values[rate_mask] = 10 ** position.copy()
     #param_values[14] = 156.25e-9*N_A*80e-6
     traj = solver.run(param_values=param_values, initials={model.species[drug_idx]: 156.25e-9*N_A*80e-6}, tspan=tdata_drug)
     lum_traj = traj.expressions['Luminescence']
-    err = np.sum((exp_data_156_25nM - lum_traj) **2)
-    return sqrt(err)
+
+    return np.sum((exp_data_156_25nM - lum_traj) **2)
+    #err = np.sum((exp_data_156_25nM - lum_traj) **2)
+    #return sqrt(err)
 
 def obj_39nM(position):
     param_values[rate_mask] = 10 ** position.copy()
     #param_values[14] = 39e-9*N_A*80e-6
     traj = solver.run(param_values=param_values, initials={model.species[drug_idx]: 39e-9*N_A*80e-6}, tspan=tdata_drug)
     lum_traj = traj.expressions['Luminescence']
-    err = np.sum((exp_data_39nM - lum_traj) **2)
-    return sqrt(err)
+
+    return np.sum((exp_data_39nM - lum_traj) **2)
+    #err = np.sum((exp_data_39nM - lum_traj) **2)
+    #return sqrt(err)
 
 def obj_9_76nM(position):
     param_values[rate_mask] = 10 ** position.copy()
     #param_values[14] = 9.76e-9*N_A*80e-6
     traj = solver.run(param_values=param_values, initials={model.species[drug_idx]: 9.76e-9*N_A*80e-6}, tspan=tdata_drug)
     lum_traj = traj.expressions['Luminescence']
-    err = np.sum((exp_data_9_76nM - lum_traj) **2)
-    return sqrt(err)
+
+    return np.sum((exp_data_9_76nM - lum_traj) **2)
+    #err = np.sum((exp_data_9_76nM - lum_traj) **2)
+    #return sqrt(err)
 
 def obj_2_44nM(position):
     param_values[rate_mask] = 10 ** position.copy()
     #param_values[14] = 2.44e-9*N_A*80e-6
     traj = solver.run(param_values=param_values, initials={model.species[drug_idx]: 2.44e-9*N_A*80e-6}, tspan=tdata_drug)
     lum_traj = traj.expressions['Luminescence']
-    err = np.sum((exp_data_2_44nM - lum_traj) **2)
-    return sqrt(err)
+
+    return np.sum((exp_data_2_44nM - lum_traj) **2)
+    #err = np.sum((exp_data_2_44nM - lum_traj) **2)
+    #return sqrt(err)
 
 def obj_0_61nM(position):
     param_values[rate_mask] = 10 ** position.copy()
     #param_values[14] = 0.61e-9*N_A*80e-6
     traj = solver.run(param_values=param_values, initials={model.species[drug_idx]: 0.61e-9*N_A*80e-6}, tspan=tdata_drug)
     lum_traj = traj.expressions['Luminescence']
-    err = np.sum((exp_data_0_61nM - lum_traj) **2)
-    return sqrt(err)
+
+    return np.sum((exp_data_0_61nM - lum_traj) **2)
+    #err = np.sum((exp_data_0_61nM - lum_traj) **2)
+    #return sqrt(err)
 
 def obj_0_15nM(position):
     param_values[rate_mask] = 10 ** position.copy()
     #param_values[14] = 0.15e-9*N_A*80e-6
     traj = solver.run(param_values=param_values, initials={model.species[drug_idx]: 0.15e-9*N_A*80e-6}, tspan=tdata_drug)
     lum_traj = traj.expressions['Luminescence']
-    err = np.sum((exp_data_0_15nM - lum_traj) **2)
-    return sqrt(err)
+
+    return np.sum((exp_data_0_15nM - lum_traj) **2)
+    #err = np.sum((exp_data_0_15nM - lum_traj) **2)
+    #return sqrt(err)
 
 # ----- PSO -----
 
@@ -285,7 +320,7 @@ def run_pso(run, iterations, bd):
     pso.set_bounds(bd)
     pso.set_speed(-.1,.1)
 
-    pso.run(num_particles=50, num_iterations=iterations, stop_threshold=1e-5)
+    pso.run(num_particles=100, num_iterations=iterations, stop_threshold=1e-5)
     #print('best pos: ', pso.best.pos)
     print('history ', pso.history)
     print('run ', run)
