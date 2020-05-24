@@ -1,6 +1,6 @@
 # Model for static luminescence relationship to cell count
 
-a <- read.csv('H841_Static_Lum_5k.csv', as.is=TRUE)
+a <- read.csv('../H841_Static_Lum_5k.csv', as.is=TRUE)
 a <- data.frame(t(a))
 
 n_cells <- as.integer(gsub("^X","",rownames(a)))
