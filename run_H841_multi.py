@@ -75,26 +75,56 @@ def presim(param_values, cellcount, drug_seed, endpoints, refinements):
 
     percent_range = drug_seed * 0.1
 
-    def check_index(stop, spacing):
-        tspan = np.linspace(0, stop, int(spacing))
-        traj_init = solver.run(
+    #def check_index(stop, spacing):
+    tspan = np.linspace(0, endpoints, int(refinements))
+    traj_init = solver.run(
 
-            param_values=param_values,
-            initials={
-                model.species[init_cell]: cellcount,
-                model.species[drug_idx]: 0
-            },
-            tspan=tspan,
-        )
-        lum = traj_init.expressions['Luminescence']
+        param_values=param_values,
+        initials={
+            model.species[init_cell]: cellcount,
+            model.species[drug_idx]: 0
+        },
+        tspan=tspan,
+    )
+    lum = traj_init.expressions['Luminescence']
 
-        lum_locate = abs(lum - drug_seed) < percent_range
-        locations = lum[lum_locate]
 
+
+    # find equilibrium
+    diff = (np.roll(lum,-1)-lum)/(tspan[1]-tspan[0])
+    diff = abs(diff/abs(lum))
+
+    diff_loc = diff < 2
+    diff_loc_1 = np.where(diff_loc)[0]
+
+    '''
+    print('diff value: ', diff[diff_loc][0], diff_loc_1[0])
+
+    plt.plot(lum, 'x')
+    plt.title('luminescence')
+    plt.show()
+    plt.plot(diff, 'x')
+    plt.title('diff')
+    plt.show()
+    '''
+
+    #lum_locate = abs(lum - drug_seed) < percent_range
+    #locations = lum[lum_locate]
+
+    #print()
+    if len(lum[diff_loc]) == 0:
+        return [], np.inf
+    else:
+        return traj_init.species[diff_loc][0], abs(lum[diff_loc][0] - drug_seed)/drug_seed
+
+
+'''
         if len(locations) > 0:
             return traj_init.species[lum_locate][0]
         else:
             return None
+        
+
     # value = check_index(5, 1e7)
     # if value is not None:
     #     return value
@@ -104,6 +134,7 @@ def presim(param_values, cellcount, drug_seed, endpoints, refinements):
             if value is not None:
                 return value
     return []
+'''
 
 
 # --------function for the static cell data---------------
@@ -132,11 +163,13 @@ def obj_dynamic(position, cellcount, drug_amount, drug_data, tol):
         print('compute initials for drug {} using a lum start of {}'
               ''.format(drug_amount, drug_data[0]))
 
-    initials = presim(
+    initials, fit = presim(
         param_values, cellcount, drug_data[0],
-        [1, 0.5, 0.1, 0.01, 0.001, 0.0001, 1e-5, 1e-6, 1e-7, 1e-8],
-        [1e4, 1e5, 1e6]
+        1, 1e4
+        #[1, 0.5, 0.1, 0.01, 0.001, 0.0001, 1e-5, 1e-6, 1e-7, 1e-8],
+        #[1e4, 1e5, 1e6]
     )
+
 
     if len(initials) == 0:
         if verbose:
