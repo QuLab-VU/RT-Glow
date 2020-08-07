@@ -245,23 +245,55 @@ def costfunction(parameter):
     else:
         return total_err
 
+def convert_to_flat_array(optimizer, model):
+    # convert to array
+    history = np.array(optimizer.all_history)
+    fitness = np.array(optimizer.all_fitness)
+    # create name masks
+    rate_params = model.parameters_rules()
+    rate_mask = np.array([p in rate_params for p in model.parameters])
+    param_values = np.array([p.value for p in model.parameters])
+    param_names = np.array([p.name for p in model.parameters])
+    col_names = list(param_names[rate_mask]) + ['fitness']
+    # convert to pandas dataframe
+    all_df = []
+    for i in range(history.shape[1]):
+        pos = history[:, 0]
+        fit_value = fitness[:, 0]
+        stacked = np.column_stack([pos, fit_value])
+        new_df = pd.DataFrame(stacked, columns=col_names)
+        new_df['particle'] = i
+        all_df.append(new_df)
+    return pd.concat(all_df)
+
 
 def run_pso(run, iterations, bd):
     pso = PSO(save_sampled=False, verbose=True, shrink_steps=False)
-    pso.set_cost_function(costfunction)
+    #pso.set_cost_function(costfunction)
     pso.set_start_position(starting_position)
     pso.set_bounds(bd)
     pso.set_speed(-.1, .1)
 
-    pso.run(num_particles=12, num_iterations=iterations, stop_threshold=1e-5,
-            num_processes=12)
+    pso.run(num_particles=20, num_iterations=iterations, stop_threshold=1e-5,
+            cost_function=costfunction, max_iter_no_improv=50,
+            num_processors=20, save_samples=True)
+
+    param_sets = convert_to_flat_array(pso, model)
+    #print(param_sets)
+    param_sets.to_csv('run'+run+'.csv')
     # print('best pos: ', pso.best.pos)
-    print('history ', pso.history)
-    print('run ', run)
-    print('fit ', pso.best.fitness)
-    print('all fitness ', pso.values)
-    np.savetxt("H841_params_" + str(run) + ".txt", 10 ** pso.history, delimiter=",")
-    np.savetxt("H841_fit_" + str(run) + ".txt", pso.values, delimiter=",")
+    #hist_flat = [10**item for sublist in pso.all_history for item in sublist]
+    #hist_flat = pso.all_history.ravel()
+    #hist_flat = pso.all_history.flatten()
+    #print('history ', hist_flat)
+    #print('run ', run)
+    #print('fit: ', pso.all_fitness)
+    #fit_flat = [item for sublist in pso.all_fitness for item in sublist]
+    #print('fit ', fit_flat)
+    #print('all fitness ', pso.values)
+    #exit()
+    #np.savetxt("H841_params_" + str(run) + ".txt", hist_flat, delimiter=",")
+    #np.savetxt("H841_fit_" + str(run) + ".txt", fit_flat, delimiter=",")
 
 
 def main():
@@ -270,7 +302,7 @@ def main():
     for arg in sys.argv[1:]:
         arg_lst.append(arg)
 
-    if len(arg_lst) == 2:
+    if len(arg_lst) == 3:
         run = arg_lst[0]
         data_file = arg_lst[1]
         iterations = int(arg_lst[1])
