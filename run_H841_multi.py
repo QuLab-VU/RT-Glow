@@ -184,7 +184,7 @@ def obj_dynamic(position, cellcount, drug_amount, drug_data, tol):
         tspan=exp_data['tdata'].values
     )
     lum_traj = traj.expressions['Luminescence']
-    error = error = np.sum(((drug_data - lum_traj)/(drug_data)) ** 2)
+    error = np.sum(((drug_data - lum_traj)/(drug_data)) ** 2)
     return error
 
 
