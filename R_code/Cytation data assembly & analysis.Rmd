@@ -28,6 +28,12 @@ d$time_i <- as.numeric(sapply(d$time_i, function(x) substr(x,nchar(x)-2,nchar(x)
 d$time <- a$TotHour[d$time_i]
 ```
 
+```{r Save complete dataset}
+full_fn <- "../data/20200917_Cytation_data_with_drugs.csv"
+if(!file.exists(full_fn)) write.csv(d, file=full_fn, row.names=FALSE)
+```
+
+
 ```{r}
 temp <- d[d$cell.line=="DMS53" & d$drug1=="SNS-314",]
 id <- unique(temp$uid)
