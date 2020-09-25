@@ -51,7 +51,7 @@ Clearly, CellProfiler counts correlated strongly with counts obtained using `py-
 
 Will relegate `py-seg` counts to a different column and replace `cell.count` with those from CellProfiler.
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 d$cell.count.pyseg <- d$cell.count
 d$cell.count <- d$count_cp
 d$count_cp <- NULL
@@ -67,20 +67,25 @@ if(!file.exists("../data/20200917_Cytation_dataset.csv"))
     write.csv(o, file="../data/20200917_Cytation_dataset.csv", row.names=FALSE)
 ```
 
-Load full dataset (with CellProfiler cell counts) and examine growth curves. 
+### Can start here
+Code above is for data processing.  
+
+#### Load full dataset 
+(CellProfiler cell counts)  
+Examine growth curves. 
 ```{r}
 d <- read.csv("../data/20200917_Cytation_dataset.csv", as.is=TRUE)
 ```
 
 
-```{r}
+```{r fig.height=3, fig.width=3}
 o <- d[d$cell.line=="DMS53" & d$drug1=="Barasertib (AZD1152-H",]
 invisible(plotGC(o$time,o$cell.count,o$well,o$drug1.conc, 
                  ylab="Population doublings",
                  main="DMS53 + barasertib"))
 ```
 
-```{r}
+```{r fig.height=3, fig.width=3}
 o <- d[d$cell.line=="DMS53" & d$drug1=="TAK-901",]
 invisible(plotGC(o$time,o$cell.count,o$well,o$drug1.conc, 
                  ylab="Population doublings",
@@ -88,14 +93,14 @@ invisible(plotGC(o$time,o$cell.count,o$well,o$drug1.conc,
 ```
 
 
-```{r}
+```{r fig.height=3, fig.width=3}
 o <- d[d$cell.line=="NCIH1048" & d$drug1=="Barasertib (AZD1152-H",]
 invisible(plotGC(o$time,o$cell.count,o$well,o$drug1.conc, 
                  ylab="Population doublings",
                  main="NCIH1048 + barasertib"))
 ```
 
-```{r}
+```{r fig.height=3, fig.width=3}
 o <- d[d$cell.line=="NCIH1048" & d$drug1=="TAK-901",]
 invisible(plotGC(o$time,o$cell.count,o$well,o$drug1.conc, 
                  ylab="Population doublings",
