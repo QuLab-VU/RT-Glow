@@ -249,11 +249,7 @@ def convert_to_flat_array(optimizer, model):
     # convert to array
     history = np.array(optimizer.all_history)
     fitness = np.array(optimizer.all_fitness)
-    # create name masks
-    rate_params = model.parameters_rules()
-    rate_mask = np.array([p in rate_params for p in model.parameters])
-    param_values = np.array([p.value for p in model.parameters])
-    param_names = np.array([p.name for p in model.parameters])
+    
     col_names = list(param_names[rate_mask]) + ['fitness']
     # convert to pandas dataframe
     all_df = []
