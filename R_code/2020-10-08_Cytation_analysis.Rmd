@@ -1,0 +1,173 @@
+---
+title: "RT-Glo Cytation 2020-10-08 analysis"
+author: "Darren Tyson"
+date: "10/14/2020"
+output: html_notebook
+---
+
+```{r Setup}
+library(diprate)
+```
+
+Define loaction of files
+```{r}
+SEGDIR = file.path('/mnt/darren/quaranta2/Cytation/2020-10-08/Segmentation')
+```
+
+### Assemble cell count data
+Need to pull all cellcounts.csv files together. 
+
+```{r}
+cc <- assemPlateData(SEGDIR, toFile=FALSE)
+```
+#### Filename structure
+Example filename: `B10_04_1_1_RFP_001.tif`  
+
+* `B10` = well  
+* `04` = unknown  
+* `1` = channel number (`1` or `2` in these data)  
+* `1` = position number (`1` or `2` in these data)  
+* `RFP` = channel name (`RFP` or `GFP` in these data)  
+* `001` = time point index (only `001` in these data; actual time point index in enclosing directory (2 up) `Experiment[0-9]{1,2}`)  
+* `tif` = image file format (only `tif` in these data)  
+
+
+```{r}
+d <- cc
+```
+
+```{r}
+d$pos <- sapply(strsplit(d$file_name, "_"), "[[", 4)
+d$uid <- paste(d$plate_id,d$well,sep='_')
+ccw <- sapply(unique(d$uid), function(id) sum(d[d$uid==id,'cell_count']))
+ch2w <- sapply(unique(d$uid), function(id) sum(d[d$uid==id,'ch2_pos']))
+d <- d[d$pos==1,]
+d$cell.count <- ccw
+d$ch2.pos <- ch2w
+d <- d[,c('plate_id','well','uid','cell.count','ch2.pos')]
+```
+
+Add other relevant columns and platemap info.
+```{r}
+d$expt.date <- "2020-10-08"
+d <- addMapInfo(d,"../data/201008_185701_Experiment1_platemap.tsv")
+```
+
+Must get image acquisition times from directory names
+
+First, make function to extract date and time from directory name.
+```{r}
+getDateTime <- function(dname)
+{
+    o <- dname[sapply(dname, function(d) grepl("[0-9]{6}_[0-9]{6}",d))]
+    mytime <- paste(sapply(strsplit(o,'_'), '[[', 1), 
+                    sapply(strsplit(o,'_'), '[[', 2), sep='_')
+    mytime <- strptime(mytime, '%y%m%d_%H%M%S')
+    names(mytime) <- NULL
+    return(mytime)
+}
+```
+Assemble directory names for each Experiment number
+
+```{r}
+im_time <- basename(list.dirs(dirname(SEGDIR), recursive=FALSE))
+im_time <- im_time[!grepl('Segment',im_time)]
+names(im_time) <- gsub('Experiment','',sapply(strsplit(im_time, '_'), '[[', 3))
+im_time <- getDateTime(im_time)
+```
+
+Add image time to data
+```{r}
+d$image.time <- im_time[d$plate_id]
+tx.time <- min(im_time) - (3600*6)
+d$time <- signif(as.numeric(difftime(d$image.time,tx.time, units='hours')),4)
+d <- d[order(d$well,d$time),]
+rownames(d) <- NULL
+```
+
+```{r fig.height=5, fig.width=5}
+cont <- d[d$drug1.conc==0,]
+#do.call(plotGC, getGCargs(cont[cont$well %in% c('B11','C11','D11'),], 
+#                          dat.col = c("time", "cell.count", "well")))
+invisible(do.call(plotGC, getGCargs(cont, 
+                          dat.col = c("time", "cell.count", "well"))))
+
+```
+
+# Summe cell counts across wells in same condition 
+To facilitate visualization due to the low cell numbers visible within each field of view. 
+```{r}
+d$ucond <- paste(d$drug1,d$drug1.conc,d$time,sep='_')
+a <- d[order(d$ucond),]
+a_counts <- sapply(unique(a$ucond), function(x) sum(a[a$ucond==x,'cell.count']))
+a_counts_ch2 <- sapply(unique(a$ucond), function(x) sum(a[a$ucond==x,'ch2.pos']))
+a <- a[!duplicated(a$ucond),]
+a$cell.count <- a_counts
+a$ch2.pos <- a_counts_ch2
+a <- a[order(a$well,a$time),]
+```
+
+### Examine control wells
+```{r fig.height=5, fig.width=5}
+cont <- a[a$drug1.conc==0,]
+cont <- cont[order(cont$well,cont$time),]
+
+invisible(do.call(plotGC, getGCargs(cont, 
+                          dat.col = c("time", "cell.count", "well"))))
+```
+
+```{r fig.height=5, fig.width=5}
+invisible(do.call(plotGC, append(getGCargs(a[a$drug1=='TAK-901',], 
+                          dat.col = c("time", "cell.count", "drug1.conc")),
+                          list(main='HEK293 + TAK-901', ylab='Population doublings'))))
+```
+#### Luminescence reads
+Read in data, reformat and replace time with image time for direct comparisons
+```{r}
+lum <- read.csv("../data/HEK293lum.csv", as.is=TRUE)
+lum_time <- lum[,1]
+lum2 <- as.matrix(lum[,-1])
+wells <- fixWellName(colnames(lum)[-1])
+lum <- data.frame(time=rep(unique(d$time)), 
+                       lum=as.vector(lum2), 
+                       well=rep(wells, each=length(unique(d$time))))
+lum$uid <- paste(match(lum$time, unique(lum$time)), lum$well, sep="_")
+lum <- addMapInfo(lum,"../data/201008_185701_Experiment1_platemap.tsv")
+```
+
+```{r}
+lum$ucond <- paste(lum$drug1,lum$drug1.conc,lum$time,sep='_')
+a2 <- lum[order(lum$ucond),]
+a2_lum <- sapply(unique(a2$ucond), function(x) sum(a2[a2$ucond==x,'lum']))
+a2 <- a2[!duplicated(a2$ucond),]
+a2$lum <- a2_lum
+a2 <- a2[order(a2$well,a2$time),]
+```
+
+#### Combine all data
+All data should be aligned by row such that can simply add luminescence reads to cell count data.
+```{r}
+if(all(a$uid==a2$uid)) 
+{
+    a$lum <- a2$lum
+} else {
+    message('Cell count data and luminescence data not aligned!')
+}
+```
+
+```{r}
+plot(a$cell.count, a$lum)
+```
+#### Only control wells exhibiting clear exponential growth
+By visual inspection of cell count growth curves, combined wells B11, C11 and D11 (saved into B11) demonstrated exponential growth after ~60 h. Use
+```{r fig.height=4, fig.width=4}
+a2 <- a[a$well=="B11",]
+plot(lum ~ cell.count, data=a2, 
+     xlab="Cell count", ylab="Luminescence", main="HEK293 control wells")
+```
+Correlation of luminescence to cell counts in control wells
+```{r}
+round(cor(a2$cell.count,a2$lum),4)
+```
+
+
