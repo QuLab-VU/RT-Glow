@@ -170,4 +170,10 @@ Correlation of luminescence to cell counts in control wells
 round(cor(a2$cell.count,a2$lum),4)
 ```
 
+### Save combined data file
+Only save if file does not already exist.
+```{r}
+dfn <- "../data/2020-10-08_Cytation_data_sum_by_condition.csv"
+if(!file.exists(dfn)) write.csv(a, file=dfn, row.names=FALSE)
+```
 
