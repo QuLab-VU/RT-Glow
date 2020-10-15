@@ -1,0 +1,55 @@
+---
+title: "RT-Glo Simulation Analysis"
+author: "Darren Tyson"
+date: "10/15/2020"
+output: html_notebook
+---
+
+```{r}
+library(diprate)
+```
+
+```{r}
+d <- read.csv("../data/model_H841_k3d_iter_100_cell_counts.csv", as.is=TRUE)
+```
+
+Subset the time points to reduce unneccesary data depth.
+```{r}
+mytimes <- sort(unique(d$time))
+mytimes <- c(0,mytimes[seq(0,length(mytimes),5)])
+d <- d[d$time %in% mytimes,]
+d$uid <- d$well
+d[d$drug1.conc==0,'drug1'] <- 'control'
+```
+
+```{r}
+cont <- d[d$drug1.conc==0,]
+```
+
+```{r fig.height=3, fig.width=3}
+# invisible(do.call(plotGC, getGCargs(d, dat.col = c('time','cell.count','drug1.conc'))))
+plotAllDrugs(d)
+```
+
+
+```{r}
+dip <- sapply(unique(d$well), function(w) findDIP(d[d$well==w,c('time','cell.count')])$dip)
+drug_conc <- sapply(unique(d$well), function(w) unique(d[d$well==w,'drug1.conc']))
+drug_conc[drug_conc==0] <- 10^(log10(min(drug_conc[drug_conc!=0]))-1)
+```
+
+```{r fig.height=2, fig.width=2}
+plot(dip ~ log10(drug_conc))
+# m <- drm(dip ~ log10(drug_conc), fct=LL.4())
+```
+
+```{r fig.height=2, fig.width=2}
+myll4_param <- c(b=1, c=-0.004, d=0.018, e=1e-7)
+x <- 10^seq(-11,-5, 0.5)
+y <- sapply(x, function(z) do.call(myll4, append(list(x=z),myll4_param)))
+plot(dip ~ log10(drug_conc), ylab=expression('DIP rate, hours'^{-1}))
+# lines(log10(x),y, type='l', col='red')
+curve(from=-11, to=-5, do.call(myll4, append(list(10^x),myll4_param)), col='red', add=TRUE)
+```
+
+
