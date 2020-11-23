@@ -1,7 +1,7 @@
 ---
 title: "RT-Glo Cytation 2020-10-08 analysis"
 author: "Darren Tyson"
-date: "10/14/2020"
+date: "11/02/2020"
 output: html_notebook
 ---
 
@@ -11,13 +11,15 @@ library(diprate)
 
 Define loaction of files
 ```{r}
-SEGDIR = file.path('/mnt/darren/quaranta2/Cytation/2020-10-08/Segmentation')
+TOPDIR = '/mnt/darren/quaranta2/Cytation/2020-10-31'
+SEGDIR = file.path(TOPDIR,'Segmentation')
 ```
 
 ### Assemble cell count data
 Need to pull all cellcounts.csv files together. 
+(Not needed. Assembled cell counts in Python)
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 cc <- assemPlateData(SEGDIR, toFile=FALSE)
 ```
 #### Filename structure
@@ -34,6 +36,7 @@ Example filename: `B10_04_1_1_RFP_001.tif`
 
 ```{r}
 d <- cc
+
 ```
 
 ```{r}
@@ -41,7 +44,11 @@ d$pos <- sapply(strsplit(d$file_name, "_"), "[[", 4)
 d$uid <- paste(d$plate_id,d$well,sep='_')
 ccw <- sapply(unique(d$uid), function(id) sum(d[d$uid==id,'cell_count']))
 ch2w <- sapply(unique(d$uid), function(id) sum(d[d$uid==id,'ch2_pos']))
-d <- d[d$pos==1,]
+# d <- d[d$pos==1,]
+
+```
+
+```{r}
 d$cell.count <- ccw
 d$ch2.pos <- ch2w
 d <- d[,c('plate_id','well','uid','cell.count','ch2.pos')]
