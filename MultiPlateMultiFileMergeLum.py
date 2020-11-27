@@ -13,6 +13,18 @@ import pandas as pd
 #list of cell lines in the experiment MAKE SURE THIS IS IN THE SAME ORDER AS THE PLATES WERE READ
 cell_line_list = ['293FT','WM88','WM1799','DMS53','H841','H1048']
 
+#adds drug info to the csv
+druglist1 = ['TAK-901','TAK-901','TAK-901','SCH1473759','SCH1473759','SCH1473759','Trametinib','Trametinib','Trametinib','SNS-314','SNS-314','SNS-314']
+dlltotal = druglist1*11
+druglist2 = ['YM-155','YM-155','YM-155','AZD-1152','AZD-1152','AZD-1152','Pimasertib','Pimasertib','Pimasertib','GSK-2879552','GSK-2879552','GSK-2879552']
+dll2 = druglist2*11
+dlltotal.extend(dll2)
+dlltotal = dlltotal*6
+dlltotal = dlltotal*25
+dlltotal = pd.DataFrame(dlltotal)
+dlltotal = dlltotal.rename(columns={0:'Drug'})
+
+
 cll = cell_line_list
 cll = cll*25
 cll = pd.DataFrame(cll)
@@ -88,4 +100,5 @@ for m in filelist:
 
 #this last step merges the dataframe with all the data from the files with the dataframe that created a dictionary between timestamp and cell line to create one single dataframe with all of the data
 BigDF = pd.merge(BigDF, Totaldf)
+BigDF['Drug']=dlltotal['Drug']
 BigDF.to_csv('/Users/claytonwandishin/Dropbox/One to One RT Glow Experiment/20201103_LumFilesOnly/CombinedLuminescence.csv')
