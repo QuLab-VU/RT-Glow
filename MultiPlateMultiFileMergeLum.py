@@ -42,6 +42,16 @@ bll = barcode_list
 bll = bll*25
 bll = pd.DataFrame(bll)
 
+barcode_list = pd.DataFrame(barcode_list)
+barcode_list = barcode_list.rename(columns={0:'barcode'})
+cell_barcode_dict = cell_line_list
+
+cbl = cell_barcode_dict
+
+cbl = pd.DataFrame(cbl)
+cbl = cbl.rename(columns={0:'cell_line'})
+cbl['barcode'] = barcode_list['barcode']
+
 filelist = os.listdir()
 filelist.sort()
 
@@ -124,7 +134,7 @@ for d in DrugCon:
         DrugConMult.append(d)
 
 #This is because the concentration gradient is repeated twice across every plate since the drugs are side by side on a 384
-#25 is the number of reads or I guess the number of timestamps divided by the number of plates
+#25 is the number of reads per plate or I guess the number of timestamps divided by the number of plates
 DrugConMult = DrugConMult*len(numberofplates)*2*25
 #converts all the elements in to floats because why not and then makes a dataframe
 DrugConMult = [float(x) for x in DrugConMult]
@@ -138,4 +148,6 @@ DrugUnits = pd.DataFrame(DrugUnits)
 DrugUnits = DrugUnits.rename(columns={0:'Drug_Units'})
 BigDF['Drug_Conc'] = DrugConMult['Drug_Conc']
 BigDF['Drug_Units'] = DrugUnits['Drug_Units']
-BigDF.to_csv('/Users/claytonwandishin/Dropbox/One to One RT Glow Experiment/20201103_LumFilesOnly/CombinedLuminescence.csv')
+#BigDF.to_csv('/Users/claytonwandishin/Dropbox/One to One RT Glow Experiment/20201103_LumFilesOnly/CombinedLuminescence.csv')
+
+#cbl.to_csv('/Users/claytonwandishin/Dropbox/One to One RT Glow Experiment/20201103_LumFilesOnly/Cell_Barcode_dict.csv')
