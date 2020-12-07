@@ -1,0 +1,45 @@
+---
+title: "Analysis of 2020-11-03 cell count + lum data"
+output: html_notebook
+---
+
+```{r Setup}
+library(diprate)
+```
+
+```{r Load data}
+d <- read.csv("../data/2020-11-03_lum&cell_counts.csv", as.is=TRUE)
+d$time <- round(d$time,2)
+d$orig.cell.count <- d$cell.count
+d$cell.count <- d$orig.cell.count - d$ch2.pos
+d$cell.count <- sapply(d$cell.count, function(x) ifelse(x <= 0, 1, x))
+```
+
+#### Examine 293FT data
+First, use a single cell line in control conditions to assess population growth.
+```{r}
+a <- d[d$cell.line=="293FT" & d$drug1.conc==0,]
+```
+
+```{r Plot 293FT control wells, fig.height=8, fig.width=8}
+invisible(do.call(plotGC, getGCargs(a)))
+```
+Find wells where the cell counts reach a high value.
+```{r}
+x <- a[a$well %in% c("F13","G13","H13"),]
+invisible(plotGC(x$time,x$cell.count,x$uid))
+```
+
+```{r}
+x <- a[a$well %in% c("F13","G13","H13"),]
+invisible(plotGC(x$time,x$RLU,x$uid))
+```
+
+```{r}
+plot(a$cell.count ~ a$RLU)
+```
+
+```{r RLU, fig.height=8, fig.width=8}
+invisible(do.call(plotGC, getGCargs(a, dat.col = c("time", "RLU", "uid"))))
+```
+
