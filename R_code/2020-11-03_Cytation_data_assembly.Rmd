@@ -1,0 +1,147 @@
+---
+title: "2020-11-03 Data Assembly"
+output: html_notebook
+author: "Darren Tyson"
+---
+
+```{r Setup}
+library(diprate)
+
+getDateTime <- function(dname)
+{
+    o <- dname[grepl("[0-9]{6}_*[0-9]{6}",dname)]
+    if(all(grepl("[0-9]{12}",o)))
+    {
+        mytime <- strptime(o, '%y%m%d%H%M%S')
+    } else {
+        mytime <- paste(sapply(strsplit(o,'_'), '[[', 1),
+            sapply(strsplit(o,'_'), '[[', 2), sep='_')
+        mytime <- strptime(mytime, '%y%m%d_%H%M%S')
+    }
+    names(mytime) <- NULL
+    return(mytime)
+}
+
+closestTime <- function (mytime, timevec, direction = "", out = "pos")
+{
+    sapply(mytime, function(mt) 
+    {
+        difft <- switch(direction,
+                        before = -difftime(timevec, mt),
+                        after = -difftime(mt, timevec),
+                        abs(difftime(mt, timevec))
+                        )
+        if(direction %in% c("before","after"))
+        {
+            mindiff = ifelse(length(difft[difft>=0]) == 0, NA, min(difft[difft>=0]))
+            if(is.na(mindiff))
+            {
+                r <- NA
+            } else {
+                r <- as.vector(switch(out,
+                                      time = timevec[which(difft == min(difft[difft>=0]) )],
+                                      pos = which(difft == min(difft[difft>=0])),
+                                      amt = min(difft[difft>=0])
+                                      )
+                               )
+            }
+        } else {
+            r <- switch(out,
+                        time = timevec[which(difft == min(difft))],
+                        pos = which(difft == min(difft)),
+                        amt = min(difft)
+                        )
+        }
+        return(r)
+    })
+}
+
+```
+
+```{r Global variables}
+TOPDIR <- '/mnt/darren/quaranta2/Cytation/2020-11-02'
+SEGDIR <- file.path(TOPDIR,'Segmentation')
+```
+
+#### Cell count data and plate annotation
+
+```{r Load cell count data}
+d <- read.csv(file.path(TOPDIR,'20201102_Cytation_cellcounts.csv'), as.is=TRUE)
+pid <- read.csv(file.path(TOPDIR,'PlateID_lookup_table.csv'), as.is=TRUE, row.names=1)
+d$plate_name <- pid[match(d$plate_id,pid$PlateInt),'PlateId']
+d$pos <- as.integer(sapply(strsplit(d$file_name, "_"), "[[", 4))
+d$uid <- paste(d$plate_id,d$well,sep='_')
+```
+
+
+#### Remaining processing code
+Will add annotation after first saving the code and pushing to GitHub.
+```{r}
+ccw <- sapply(unique(d$uid), function(id) sum(d[d$uid==id,'cell_count']))
+ch2w <- sapply(unique(d$uid), function(id) sum(d[d$uid==id,'ch2_pos']))
+
+d <- d[d$pos==1,]
+d$cell.count <- ccw
+d$ch2.pos <- ch2w
+d <- d[,c('plate_id','plate_name','well','uid','cell.count','ch2.pos')]
+d$image.time <- getDateTime(d$plate_name)
+
+ml_path <- "../data/momentum_log_CMW_11-03-2020.txt"
+ml <- read.csv(ml_path, header=FALSE, skip=5, as.is=TRUE, sep='\t')
+read_i <- which(ml$V6=='Read')
+ml <- ml[read_i,c('V1','V6','V12','V13','V14')]
+colnames(ml) <- c('instrument','action','start.time','end.time','barcode')
+rownames(ml) <- NULL
+
+plateInfo <- ml[,c('barcode','start.time','end.time')]
+lum_fn <- list.files("../data/20201103_luminescence")
+lum_times <- basename(lum_fn)
+lum_times <- gsub(".xls","",sapply(strsplit(lum_fn, "_"), "[[", 6))
+lum_times <- getDateTime(lum_times)
+plateInfo$lum.filenames <- lum_fn
+plateInfo$lum.time <- lum_times
+
+lum <- read.csv('~/git-repos/RT-Glow/data/CombinedLuminescence.csv',
+                as.is=TRUE, row.names=1)
+lum <- lum[order(lum$DateTime,lum$Well),]
+
+img_time_i <- closestTime(plateInfo$lum.time, unique(d$image.time), direction="before")
+plateInfo$image.time <- unique(d$image.time)[img_time_i]
+plateInfo$lum.time.CW <- as.POSIXct(unique(lum$DateTime))[closestTime(
+    plateInfo$lum.time,as.POSIXct(unique(lum$DateTime)))]
+
+d <- d[d$image.time >= min(plateInfo$image.time),]
+d$lum.time <- plateInfo[match(d$image.time,plateInfo$image.time),'lum.time']
+d$lum.time.CW <-  as.character(plateInfo[match(d$image.time,plateInfo$image.time),'lum.time.CW'])
+d$plate.name <- plateInfo[match(d$image.time,plateInfo$image.time),'barcode']
+d$uid <- paste(d$plate.name, d$well, sep="_")
+d <- d[order(d$uid,d$image.time),]
+d$uid2 <- paste(d$uid,d$lum.time.CW, sep="_")
+
+a <- lum
+a$uid <- paste(a$Plate_Name,a$Well,sep="_")
+a <- a[order(a$uid,a$DateTime),]
+colnames(a)[colnames(a)=="DateTime"] <- "lum.time.CW"
+a$uid2 <- paste(a$uid,a$lum.time.CW, sep="_")
+a <- a[a$uid2 %in% d$uid2,]
+a$cell.count <- d[match(d$uid2,a$uid2),'cell.count']
+a$ch2.pos <- d[match(d$uid2,a$uid2),'ch2.pos']
+a$image.time <- d[match(d$uid2,a$uid2),'image.time']
+colnames(a)[2:8] <- c('well','lum.time.CW','cell.line','plate.name','drug1','drug1.conc','drug1.units')
+a$expt.date <- "2020-11-03"
+a$upid <- paste(a$expt.date,a$plate.name,sep="_")
+a$time <- signif(as.numeric(difftime(a$image.time, (min(a$image.time)-30), units="hours")),3)
+a <- a[,c('expt.date','plate.name','cell.line','image.time','lum.time.CW','time',          'uid','well','drug1','drug1.conc','drug1.units','cell.count','ch2.pos','RLU')]
+a <- a[order(a$cell.line,a$well,a$time),]
+rownames(a) <- NULL
+```
+
+#### Write compiled data files
+Do not overwrite data if already exists.
+```{r Save files}
+if(!file.exists("../data/2020-11-03_lum&cell_counts.csv"))
+    write.csv(a, file="../data/2020-11-03_lum&cell_counts.csv", row.names=FALSE)
+if(!file.exists("../data/2020-11-03_plateInfo.csv"))
+    write.csv(plateInfo, file="../data/2020-11-03_plateInfo.csv", row.names=FALSE)
+```
+
