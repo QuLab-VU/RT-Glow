@@ -48,6 +48,20 @@ closestTime <- function (mytime, timevec, direction = "", out = "pos")
     })
 }
 
+getDateTime <- function(dname)
+{
+    o <- dname[grepl("[0-9]{6}_*[0-9]{6}",dname)]
+    if(all(grepl("[0-9]{12}",o)))
+    {
+        mytime <- strptime(o, '%y%m%d%H%M%S')
+    } else {
+        mytime <- paste(sapply(strsplit(o,'_'), '[[', 1),
+            sapply(strsplit(o,'_'), '[[', 2), sep='_')
+        mytime <- strptime(mytime, '%y%m%d_%H%M%S')
+    }
+    names(mytime) <- NULL
+    return(mytime)
+}
 ```
 
 #### Data assembly
@@ -55,17 +69,23 @@ Data were not completely compiled into a single dataframe for analysis. Must ass
 
 ```{r}
 TOPDIR <- "../data/20201216_Lum_Image_Run/"
+# Momentum log path
 ml_path <- file.path(TOPDIR,'MOMENTUM_LOGS_FOR_V004831B_20201214_100msRFP_10msGFP_20201216_153632_0.txt')
+# Momentum log
 ml <- read.csv(ml_path, header=FALSE, skip=5, as.is=TRUE, sep='\t')
+# Index of rows with reads
 read_i <- which(ml$V6=='Read')
+# Keep only relevant columns
 ml <- ml[read_i,c('V1','V6','V12','V13','V14')]
+# Rename columns
 colnames(ml) <- c('instrument','action','start.time','end.time','barcode')
 rownames(ml) <- NULL
 
+
 lum <- read.csv(file.path(TOPDIR,'CombinedLuminescenceTOTAL.csv'), as.is=TRUE, row.names=1)
+# Cell counts = cc
 cc <- read.csv(file.path(TOPDIR,'Cellcounts_20201214.csv'), as.is=TRUE)
 cc <- cc[order(cc$plate_id,cc$well),]
-cc$uid <- paste0(cc$plate_id)
 ```
 
 #### Data munging
@@ -76,17 +96,36 @@ Momentum log should have times matching (or very similar to) these values. Must 
 The cell counts were obtained from two different positions within each well. These values should be summed and same for the counts of nuclei that are positive in the second channel (the dead-cell stain; `ch2_pos`).
 
 ```{r Time matching}
-ml$acq.time <- strptime(ml$end.time, format="%m/%d/%Y %r")
+# Cell count file path =  ccfp; from task arguments sent to py-seg image processing pipeline
+ccfp <- read.csv(file.path(TOPDIR,'TaskArgs_20201214.csv'))$nuc_im_path
+# Find times for each unique plate
+ccfp <- gsub("/mnt/monica/quaranta2/Cytation/2020-12-14/images/","",ccfp)
+ccfp <- unique(sapply(strsplit(ccfp, "/"), "[[", 1))
+
+# get plate IDs from number after "Experiment"; should match Momentum log
+pid <- as.integer(sapply(strsplit(ccfp,"Experiment"), "[[", 2))
+names(pid) <- getDateTime(ccfp)
+
+ml$end.time.rfmt <- strptime(ml$end.time, format="%m/%d/%Y %r")
+ml$start.time.rfmt <- strptime(ml$start.time, format="%m/%d/%Y %r")
 
 lum$file.save.time <- strptime(lum$Datetime_Lum, format="%Y-%m-%d %H:%M:%S")
-# ufst = unique file save times
-ufst <- unique(lum$file.save.time)
+
+# ulfst = unique lum file save times
+ulfst <- unique(lum$file.save.time)
 
 # find closest time in ufst to each ml$acq.time
 ml$match.time <- ufst[closestTime(ml$acq.time, ufst, direction="before")]
 
+# cc$uid <- paste(cc$plate_id,cc$well,sep="_")
 ```
 
+
+### Stop here
+
+
+#### Not yet incorporated with above
+DO NOT RUN
 
 ```{r fig.height=5, fig.width=5}
 cont <- d[d$drug1.conc==0,]
@@ -97,7 +136,7 @@ invisible(do.call(plotGC, getGCargs(cont,
 
 ```
 
-# Summe cell counts across wells in same condition 
+# Sum cell counts across wells in same condition 
 To facilitate visualization due to the low cell numbers visible within each field of view. 
 ```{r}
 d$ucond <- paste(d$drug1,d$drug1.conc,d$time,sep='_')
