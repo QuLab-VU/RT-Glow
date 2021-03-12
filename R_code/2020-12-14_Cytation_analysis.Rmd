@@ -39,7 +39,7 @@ closestTime <- function (mytime, timevec, direction = "", out = "pos")
             }
         } else {
             r <- switch(out,
-                        time = timevec[which(difft == min(difft))],
+                        time = as.character(timevec[which(difft == min(difft))]),
                         pos = which(difft == min(difft)),
                         amt = min(difft)
                         )
@@ -76,9 +76,9 @@ ml <- read.csv(ml_path, header=FALSE, skip=5, as.is=TRUE, sep='\t')
 # Index of rows with reads
 read_i <- which(ml$V6=='Read')
 # Keep only relevant columns
-ml <- ml[read_i,c('V1','V6','V12','V13','V14')]
+ml <- ml[read_i,c('V1','V6','V7','V12','V13','V14')]
 # Rename columns
-colnames(ml) <- c('instrument','action','start.time','end.time','barcode')
+colnames(ml) <- c('instrument','action','id','start.time','end.time','barcode')
 rownames(ml) <- NULL
 
 
@@ -86,6 +86,9 @@ lum <- read.csv(file.path(TOPDIR,'CombinedLuminescenceTOTAL.csv'), as.is=TRUE, r
 # Cell counts = cc
 cc <- read.csv(file.path(TOPDIR,'Cellcounts_20201214.csv'), as.is=TRUE)
 cc <- cc[order(cc$plate_id,cc$well),]
+
+# standardize colnames
+colnames(cc) <- gsub("_",".",colnames(cc))
 ```
 
 #### Data munging
@@ -96,29 +99,70 @@ Momentum log should have times matching (or very similar to) these values. Must 
 The cell counts were obtained from two different positions within each well. These values should be summed and same for the counts of nuclei that are positive in the second channel (the dead-cell stain; `ch2_pos`).
 
 ```{r Time matching}
-# Cell count file path =  ccfp; from task arguments sent to py-seg image processing pipeline
-ccfp <- read.csv(file.path(TOPDIR,'TaskArgs_20201214.csv'))$nuc_im_path
+# Cell count image file path =  ccifp; from task arguments sent to py-seg image processing pipeline
+ccifp <- read.csv(file.path(TOPDIR,'TaskArgs_20201214.csv'))$nuc_im_path
 # Find times for each unique plate
-ccfp <- gsub("/mnt/monica/quaranta2/Cytation/2020-12-14/images/","",ccfp)
-ccfp <- unique(sapply(strsplit(ccfp, "/"), "[[", 1))
+ccifp <- gsub("/mnt/monica/quaranta2/Cytation/2020-12-14/images/","",ccifp)
+ccifp <- unique(sapply(strsplit(ccifp, "/"), "[[", 1))
 
 # get plate IDs from number after "Experiment"; should match Momentum log
-pid <- as.integer(sapply(strsplit(ccfp,"Experiment"), "[[", 2))
-names(pid) <- getDateTime(ccfp)
+pid <- as.integer(sapply(strsplit(ccifp,"Experiment"), "[[", 2))
+names(pid) <- getDateTime(ccifp)
 
-ml$end.time.rfmt <- strptime(ml$end.time, format="%m/%d/%Y %r")
-ml$start.time.rfmt <- strptime(ml$start.time, format="%m/%d/%Y %r")
+cc$image.time <- names(pid)[match(cc$plate.id,pid)]
 
-lum$file.save.time <- strptime(lum$Datetime_Lum, format="%Y-%m-%d %H:%M:%S")
+# standardize lum colnames
+colnames(lum) <- gsub("_",".",tolower(colnames(lum)))
+if(!any(grepl("drug1",colnames(lum)))) colnames(lum) <- gsub("drug","drug1",colnames(lum))
+colnames(lum)[colnames(lum)=="tothour.lum"] <- "time"
+colnames(lum)[colnames(lum)=="datetime.lum"] <- "lum.time"
 
 # ulfst = unique lum file save times
-ulfst <- unique(lum$file.save.time)
+ulfst <- unique(lum$lum.time)
 
-# find closest time in ufst to each ml$acq.time
-ml$match.time <- ufst[closestTime(ml$acq.time, ufst, direction="before")]
+# plate name (barcode from Momentum log)
+# pn <- ml[closestTime(unique(cc$image.time),ml[grepl('RFP',ml$id),'start.time.rfmt']),'barcode']
+# plate name (from lum)
+pn <- lum[closestTime(unique(cc$image.time),unique(lum$lum.time),direction="before"),'plate.name']
+names(pn) <- unique(cc$image.time)
 
-# cc$uid <- paste(cc$plate_id,cc$well,sep="_")
+# add plate.name (barcode) to cc
+cc$plate.name <- pn[match(cc$image.time,names(pn))]
+
+
+# must sum cell counts and ch2_pos per uid2 (unique for each time point) 
+cc$uid <- paste(cc$plate.id,cc$well,sep="_")
+cc$uid2 <- paste(cc$uid,cc$plate.id,sep="_")
+cc_temp <- cc[!duplicated(cc$uid2),]
+cc_temp$cell.count <- sapply(unique(cc$uid2), function(x) sum(cc[cc$uid2==x,'cell.count']))
+cc_temp$ch2.pos <- sapply(unique(cc$uid2), function(x) sum(cc[cc$uid2==x,'ch2.pos']))
+
+# time lookup table: cc image times as names, lum file save times as values
+time_lut <- closestTime(unique(cc_temp$image.time),ulfst,direction="before",out="time")
+
+# Add luminescence read times; note that the first luminescence read is missing
+cc_temp$lum.time <- time_lut[cc_temp$image.time]
+
+# remove unneeded columns from cc_temp
+cc_temp <- cc_temp[,c("plate.name","image.time","lum.time","well","cell.count","ch2.pos")]
+# first plate did not get luminescence read; must pull info from Momentum logs or remove
+cc_temp <- cc_temp[!is.na(cc_temp$plate.name),]
+cc_temp$uid <- paste(cc_temp$plate.name,cc_temp$well,cc_temp$lum.time, sep="_")
+
+lum$uid <- paste(lum$plate.name,lum$well,lum$lum.time, sep="_")
+
+
+
+
+# ml$start.time.rfmt <- strptime(ml$start.time, format="%m/%d/%Y %r")
+# ml$end.time.rfmt <- strptime(ml$end.time, format="%m/%d/%Y %r")
+# ml$image.time <- unique(cc$image.time)[closestTime(ml$start.time.rfmt,unique(cc$image.time))]
+
+
 ```
+
+## NOTE: plate names and times do not match between imaging and lum
+Try to use momentum log to reconcile
 
 
 ### Stop here
