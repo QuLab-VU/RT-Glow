@@ -1,0 +1,38 @@
+---
+title: "RT-Glo Cytation 2021-03-30 analysis"
+author: "Darren Tyson"
+date: "04/28/2021"
+output: html_notebook
+---
+
+```{r Setup}
+library(diprate)
+```
+
+### Using Clayton's data assembly
+
+
+```{r}
+d <- read.csv("../data/LumandCellCounts_20210330_parsed.csv", as.is=TRUE, row.names = 1)
+colnames(d) <- gsub("TotHour_Image",'time',colnames(d))
+colnames(d) <- gsub("_", '.', colnames(d), fixed=TRUE)
+d$uid <- paste(d$cell.line, d$well, d$plate.name, sep="_")
+```
+
+#### Change column names to standard
+```{r}
+by_plate <- lapply(unique(d$Barcode), function(bc) d[d$Barcode==bc & d$drug1.conc==0,])
+by_plate <- lapply(by_plate, function(x) x[order(x$well,x$time),])
+```
+
+```{r fig.height=8.5, fig.width=11}
+prepMultiGCplot()
+invisible(lapply(seq_along(by_plate), function(i) do.call(plotGC, append(getGCargs(by_plate[[i]]),
+                                                                        list(leg=FALSE,main=unique(by_plate[[i]]$cell.line))))))
+```
+
+#### Find image names
+```{r}
+
+```
+
