@@ -202,6 +202,7 @@ par(mfrow=c(4,3))
 for (barcode in names(by_plate)) {
     cont <- by_plate[[barcode]][by_plate[[barcode]]$drug1.conc==0,]
     cont <- cont[order(cont$well,cont$time),]
+    if(any(grepl("DMS53",cont$cell.line))) cont <- cont[cont$time <= 48,]
     cont <- cont[cont$time <= 96,]
     cl <- unique(cont$cell.line)
     #do.call(plotGC, getGCargs(cont[cont$well %in% c('B11','C11','D11'),], 
@@ -214,5 +215,28 @@ for (barcode in names(by_plate)) {
                               dat.col = c("time", "rlu", "well")),list(main=paste(cl,"lum"),count.type = "log"))))    
 }
 
+```
+
+### Clayton's heuristic
+Clayton Wandishin states that the relationship between luminscence and cell count can be explained by the following mathematical model:
+
+`1 = d/dx(log2(J*Lum))`  
+
+
+```{r}
+my_lum <- lum2[lum2$time <= 96,c('cell.line','time','rlu')]
+dms53 <- my_lum[my_lum$cell.line=="DMS53" & my_lum$time <= 48,]
+my_lum <- rbind(my_lum[my_lum$cell.line!="DMS53",],dms53)
+
+j <- c(H1048=18,H841=14,DMS53=12)
+```
+
+```{r fig.height=3, fig.width=8.5}
+par(mfrow=c(1,3))
+invisible(lapply(names(j), function(n) {
+    dat <- my_lum[my_lum$cell.line==n,]
+    plot(dat$time,log2(dat$rlu)*dat$time/j[n])
+}
+))
 ```
 
