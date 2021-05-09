@@ -1,0 +1,67 @@
+---
+title: "Real-time luminescence enables estimation of drug-induced proliferation rates in adherent and suspension cell lines"
+author: "Darren Tyson & Clayton Wandishin"
+date: "05/09/2021"
+output: html_notebook
+---
+
+## Required R packages
+The `diprate` package is available from GitHub here: [dipDRC](https://www.github.com/Qulab-VU/dipDRC)
+```{r Setup}
+library(diprate)
+```
+
+## Data assembly
+```{r Load data}
+static <- read.csv("../data/from_CW_via_Slack_20210507/StaticDF.csv", row.names=1)
+static <- static[order(static$Culture_Type,static$Cell_Line),]
+
+```
+
+
+## Code for reproducing figures
+### Correlation between luminescence and cell count
+```{r Cell count & luminescence, fig.height=3, fig.width=6}
+par(mfrow=c(2,4))
+linear_models <- lapply(unique(static$Cell_Line), function(cl) {
+    dat <- static[static$Cell_Line==cl,]
+    culture_type <- unique(dat$Culture_Type)
+    m <- lm(log2(RLU) ~ log2(Cell_Conc+1), data = dat)
+    plot(log2(RLU) ~ log2(Cell_Conc), data=dat, main=paste0(cl," (",culture_type,")"), xlim=c(5,14), ylim=c(7,18))
+    abline(m, col="blue")
+    return(m)
+    })
+names(linear_models) <- unique(static$Cell_Line)
+```
+
+```{r}
+lagLine <- function (x, lower, slope, br = 64) sapply(x, function(z) ifelse(z <= br, lower, lower + (z-br) * slope))
+
+fitLagLin <- function(x, y, start_list=list(lower=5, slope=1, br=5)) 
+    nls(y ~ lagLine(x=x, lower, slope, br),
+           start = start_list,
+           algorithm="port")
+```
+
+
+```{r Lag-linear model fits, fig.height=3, fig.width=6}
+par(mfrow=c(2,4))
+lag_linear_models <- lapply(unique(static$Cell_Line), function(cl) {
+    tryCatch({
+        dat <- static[static$Cell_Line==cl,]
+        culture_type <- unique(dat$Culture_Type)
+        if(cl %in% c("H524","H526"))
+        {
+            m <- fitLagLin(log2(dat$Cell_Conc+1), log2(dat$RLU), start_list=list(lower=5, slope=1, br=10))
+        } else {
+            m <- fitLagLin(log2(dat$Cell_Conc+1), log2(dat$RLU))
+        }    
+            
+        plot(log2(RLU) ~ log2(Cell_Conc), data=dat, main=paste0(cl," (",culture_type,")"), xlim=c(5,14), ylim=c(7,18))
+        curve(from=0.5,to=18, lagLine(x, lower=coef(m)['lower'], slope=coef(m)['slope'], br=coef(m)['br']), col="blue", lwd=2, add=TRUE)
+        text(12, 9, paste(""))
+        return(m)
+    }, error=function(e) { return(NA) })
+})
+```
+
