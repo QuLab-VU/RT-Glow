@@ -15,7 +15,8 @@ library(diprate)
 ```{r Load data}
 static <- read.csv("../data/from_CW_via_Slack_20210507/StaticDF.csv", row.names=1)
 static <- static[order(static$Culture_Type,static$Cell_Line),]
-
+static[static$Cell_Conc==0,"Cell_Conc"] <- 1
+cell_lines <- unique(static$Cell_Line)
 ```
 
 
@@ -23,45 +24,104 @@ static <- static[order(static$Culture_Type,static$Cell_Line),]
 ### Correlation between luminescence and cell count
 ```{r Cell count & luminescence, fig.height=3, fig.width=6}
 par(mfrow=c(2,4))
-linear_models <- lapply(unique(static$Cell_Line), function(cl) {
-    dat <- static[static$Cell_Line==cl,]
-    culture_type <- unique(dat$Culture_Type)
-    m <- lm(log2(RLU) ~ log2(Cell_Conc+1), data = dat)
-    plot(log2(RLU) ~ log2(Cell_Conc), data=dat, main=paste0(cl," (",culture_type,")"), xlim=c(5,14), ylim=c(7,18))
-    abline(m, col="blue")
-    return(m)
-    })
-names(linear_models) <- unique(static$Cell_Line)
-```
-
-```{r}
-lagLine <- function (x, lower, slope, br = 64) sapply(x, function(z) ifelse(z <= br, lower, lower + (z-br) * slope))
-
-fitLagLin <- function(x, y, start_list=list(lower=5, slope=1, br=5)) 
-    nls(y ~ lagLine(x=x, lower, slope, br),
-           start = start_list,
-           algorithm="port")
-```
-
-
-```{r Lag-linear model fits, fig.height=3, fig.width=6}
-par(mfrow=c(2,4))
-lag_linear_models <- lapply(unique(static$Cell_Line), function(cl) {
-    tryCatch({
+linear_models <- lapply(cell_lines, function(cl) {
         dat <- static[static$Cell_Line==cl,]
         culture_type <- unique(dat$Culture_Type)
-        if(cl %in% c("H524","H526"))
-        {
-            m <- fitLagLin(log2(dat$Cell_Conc+1), log2(dat$RLU), start_list=list(lower=5, slope=1, br=10))
-        } else {
-            m <- fitLagLin(log2(dat$Cell_Conc+1), log2(dat$RLU))
-        }    
-            
-        plot(log2(RLU) ~ log2(Cell_Conc), data=dat, main=paste0(cl," (",culture_type,")"), xlim=c(5,14), ylim=c(7,18))
-        curve(from=0.5,to=18, lagLine(x, lower=coef(m)['lower'], slope=coef(m)['slope'], br=coef(m)['br']), col="blue", lwd=2, add=TRUE)
-        text(12, 9, paste(""))
+        m <- lm(log2(RLU) ~ log2(Cell_Conc), data = dat)
+        plot(log2(RLU) ~ log2(Cell_Conc), data=dat, main=paste0(cl," (",culture_type,")"), xlim=c(0,14), ylim=c(7,18))
+        abline(m, col="blue")
         return(m)
-    }, error=function(e) { return(NA) })
+    })
+names(linear_models) <- cell_lines
+```
+```{r Cell count & luminescence minus control, fig.height=3, fig.width=6}
+par(mfrow=c(2,4))
+linear_models <- lapply(cell_lines, function(cl) {
+        dat <- static[static$Cell_Line==cl & static$Cell_Conc >1,]
+        culture_type <- unique(dat$Culture_Type)
+        m <- lm(log2(RLU) ~ log2(Cell_Conc), data = dat)
+        plot(log2(RLU) ~ log2(Cell_Conc), data=dat, main=paste0(cl," (",culture_type,")"), xlim=c(0,14), ylim=c(7,18))
+        abline(m, col="blue")
+        return(m)
+    })
+names(linear_models) <- cell_lines
+```
+
+#### Need 2-part function to accommodate minimum values
+Assuming first part of data is at some minimum value and not associated with any actual cell count (lower limit of detection), which would result in `slope=0` (values are constant until some minimum number of cells is achieved).
+```{r Lag-linear function}
+lagLine <- function (x, lower, slope, br = 64) sapply(x, function(z) ifelse(z <= br, lower, lower + (z-br) * slope))
+
+fitLagLin <- function(x, y, start_list=list(lower=5, slope=1, br=1)) 
+    nls(y ~ lagLine(x=x, lower, slope, br),
+        start = start_list,
+        algorithm="port",
+        control=nls.control(maxiter=500)
+        )
+```
+
+#### Fit the lag-linear model to data
+```{r Lag-linear model fits, fig.height=3, fig.width=7}
+par(mfrow=c(2,5))
+lag_linear_models <- lapply(cell_lines, function(cl) {
+    m <- tryCatch({
+        dat <- static[static$Cell_Line==cl,]
+        culture_type <- unique(dat$Culture_Type)
+        m <- fitLagLin(log2(dat$Cell_Conc), log2(dat$RLU))
+    }, error=function(e) { return(e) })
+    if(culture_type == "Adherent") 
+    {
+        xr <- c(4,12)
+    } else {
+        xr <- c(6,14)
+    }
+    plot(log2(RLU) ~ log2(Cell_Conc), data=dat, main=paste0(cl," (",culture_type,")"), xlim=xr, ylim=c(7,18))
+    if(class(m)[1] != "nls")
+    {
+        m <- lm(log2(RLU) ~ log2(Cell_Conc), data=dat[dat$Cell_Conc>1,])
+        abline(m, col="blue", lwd=2)
+    } else {
+        curve(from=0.5,to=18, lagLine(x, lower=coef(m)['lower'], 
+                                      slope=coef(m)['slope'], 
+                                      br=coef(m)['br']), 
+              col="blue", lwd=2, add=TRUE)
+    }
+    # text(12, 9, paste("Adj R2 ="))
+    return(m)
 })
+names(lag_linear_models) <- cell_lines
+```
+
+
+
+#### Compare to linear models
+Assuming the lowest number of cells is above the threshold of detection, will remove the no cells control and fit remaining data.
+```{r}
+dat <- static[static$Cell_Conc > 1,]
+m2 <- lme4::lmList(log2(RLU) ~ log2(Cell_Conc) | Cell_Line, data=dat)
+f2 <- coef(m2)
+r2 <- unlist(summary(m2)$adj.r.squared)
+```
+
+```{r Linear models, fig.height=3, fig.width=7}
+par(mfrow=c(2,5))
+temp <- lapply(cell_lines, function(cl) {
+    dtp <- dat[dat$Cell_Line==cl,]
+    culture_type <- unique(dtp[dtp$Cell_Line==cl,'Culture_Type'])
+    if(culture_type == "Adherent") 
+    {
+        xr <- c(5,12)
+    } else {
+        xr <- c(7,14)
+    }
+    plot(log2(RLU) ~ log2(Cell_Conc), 
+         data=dtp, 
+         main=paste0(cl," (",culture_type,")"), 
+         xlim=xr, ylim=c(7,18))
+    abline(m2[[cl]], col="blue", lwd=2)
+    text(xr[1]+0.5, 16, expression(R^2))
+    text(xr[1]+1.5, 16, paste("=", signif(r2[cl],3)))
+})
+
 ```
 
