@@ -18,26 +18,18 @@ static <- static[order(static$Culture_Type,static$Cell_Line),]
 static[static$Cell_Conc==0,"Cell_Conc"] <- 1
 cell_lines <- unique(static$Cell_Line)
 ```
+#### Outlier value in CORL279
+```{r}
+static <- static[!(static$Cell_Line=="CORL279" & static$RLU < 10),]
+```
 
 
 ## Code for reproducing figures
 ### Correlation between luminescence and cell count
-```{r Cell count & luminescence, fig.height=3, fig.width=6}
-par(mfrow=c(2,4))
+```{r Cell count & luminescence, fig.height=3, fig.width=7}
+par(mfrow=c(2,5))
 linear_models <- lapply(cell_lines, function(cl) {
         dat <- static[static$Cell_Line==cl,]
-        culture_type <- unique(dat$Culture_Type)
-        m <- lm(log2(RLU) ~ log2(Cell_Conc), data = dat)
-        plot(log2(RLU) ~ log2(Cell_Conc), data=dat, main=paste0(cl," (",culture_type,")"), xlim=c(0,14), ylim=c(7,18))
-        abline(m, col="blue")
-        return(m)
-    })
-names(linear_models) <- cell_lines
-```
-```{r Cell count & luminescence minus control, fig.height=3, fig.width=6}
-par(mfrow=c(2,4))
-linear_models <- lapply(cell_lines, function(cl) {
-        dat <- static[static$Cell_Line==cl & static$Cell_Conc >1,]
         culture_type <- unique(dat$Culture_Type)
         m <- lm(log2(RLU) ~ log2(Cell_Conc), data = dat)
         plot(log2(RLU) ~ log2(Cell_Conc), data=dat, main=paste0(cl," (",culture_type,")"), xlim=c(0,14), ylim=c(7,18))
@@ -69,12 +61,13 @@ lag_linear_models <- lapply(cell_lines, function(cl) {
         culture_type <- unique(dat$Culture_Type)
         m <- fitLagLin(log2(dat$Cell_Conc), log2(dat$RLU))
     }, error=function(e) { return(e) })
-    if(culture_type == "Adherent") 
-    {
-        xr <- c(4,12)
-    } else {
-        xr <- c(6,14)
-    }
+    # if(culture_type == "Adherent") 
+    # {
+    #     xr <- c(4,12)
+    # } else {
+    #     xr <- c(6,14)
+    # }
+    xr <- c(0,14)
     plot(log2(RLU) ~ log2(Cell_Conc), data=dat, main=paste0(cl," (",culture_type,")"), xlim=xr, ylim=c(7,18))
     if(class(m)[1] != "nls")
     {
@@ -90,6 +83,22 @@ lag_linear_models <- lapply(cell_lines, function(cl) {
     return(m)
 })
 names(lag_linear_models) <- cell_lines
+```
+
+
+#### Try eliminating controls
+Assume all luminescence values with cells produce detectable signal.
+```{r Cell count & luminescence minus control, fig.height=3, fig.width=7}
+par(mfrow=c(2,5))
+linear_models <- lapply(cell_lines, function(cl) {
+        dat <- static[static$Cell_Line==cl & static$Cell_Conc >1,]
+        culture_type <- unique(dat$Culture_Type)
+        m <- lm(log2(RLU) ~ log2(Cell_Conc), data = dat)
+        plot(log2(RLU) ~ log2(Cell_Conc), data=dat, main=paste0(cl," (",culture_type,")"), xlim=c(0,14), ylim=c(7,18))
+        abline(m, col="blue")
+        return(m)
+    })
+names(linear_models) <- cell_lines
 ```
 
 
@@ -119,8 +128,9 @@ temp <- lapply(cell_lines, function(cl) {
          main=paste0(cl," (",culture_type,")"), 
          xlim=xr, ylim=c(7,18))
     abline(m2[[cl]], col="blue", lwd=2)
-    text(xr[1]+0.5, 16, expression(R^2))
-    text(xr[1]+1.5, 16, paste("=", signif(r2[cl],3)))
+    text(xr[1]+0.25, 17, pos=4, paste("slope =",signif(f2[cl,2],3)))
+    text(xr[1]+0.25, 16, pos=4, expression(R^2))
+    text(xr[1]+1, 16, pos=4, paste("=", signif(r2[cl],3)))
 })
 
 ```
