@@ -9,6 +9,7 @@ output: html_notebook
 The `diprate` package is available from GitHub here: [dipDRC](https://www.github.com/Qulab-VU/dipDRC)
 ```{r Setup}
 library(diprate)
+options(stringsAsFactors=FALSE)
 ```
 
 ## Static data
@@ -179,7 +180,7 @@ names(lag_linear1_models) <- cell_lines
 ## Combined cell count & lum data
 
 ```{r}
-lcc <- read.csv('../data/from_CW_via_Slack_20210507/20201216_Lum_CellCounts_Thunor.csv', row.names=1)
+lcc <- read.csv('../data/from_CW_via_Slack_20210507/20201216_Lum_CellCounts_Thunor.csv', row.names=1, as.is=TRUE)
 lcc <- lcc[,-1]
 lcc$uid <- paste(lcc$upid,lcc$well,sep="_")
 lcc <- lcc[order(lcc$uid,lcc$time),]
@@ -206,32 +207,66 @@ invisible(lapply(names(ctrls), function(n) do.call(plotGC,
         append(getGCargs(ctrls[[n]], dat.col=c("time","RLU","uid")),list(main=n, leg=FALSE)))))
 ```
 
-```{r DMS53, fig.height=3, fig.width=6}
-dms53 <- ctrls[['DMS53']]
-
-par(mfrow=c(1,2))
-
-invisible(do.call(plotGC, append(getGCargs(dms53),list(main="DMS53, cell count", leg=FALSE))))
-invisible(do.call(plotGC, append(getGCargs(dms53, dat.col=c("time","RLU","uid")),list(main="DMS53, lum", leg=FALSE))))
-```
-
-```{r H1048, fig.height=3, fig.width=6}
-h1048 <- ctrls[['H1048']]
-
-par(mfrow=c(1,2))
-
-invisible(do.call(plotGC, append(getGCargs(h1048, dat.col=c("time","Cell_Count","uid")),list(main="H1048, cell count", leg=FALSE))))
-invisible(do.call(plotGC, append(getGCargs(h1048, dat.col=c("time","RLU","uid")),list(main="H1048, lum", leg=FALSE))))
-```
 #### Sum of all control cell counts at each time point
 ```{r}
-h1048_sumc <- sapply(unique(h1048$time), function(i) sum(h1048[h1048$time==i,"Cell_Count"]))
-h1048_sumc <- data.frame(time=unique(h1048$time), cell.count=h1048_sumc)
-plot(log2(cell.count)-log2(cell.count)[1] ~ time, data=h1048_sumc, type="l", ylab="Population doublings")
+sumc <- do.call(rbind, lapply(lcc_cell_lines, function(cl) 
+    {
+        counts <- sapply(unique(ctrls[[cl]]$time), function(i) 
+            sum(ctrls[[cl]][ctrls[[cl]]$time==i,"Cell_Count"]))
+        times <- unique(ctrls[[cl]]$time)
+        data.frame(cell.line=cl, time=times, cell.count=counts)
+}))
+sumc$popdubs <- log2norm(sumc$cell.count,sumc$cell.line)
+sumc$cell.line <- as.character(sumc$cell.line)
+# h1048_sumc <- data.frame(time=unique(h1048$time), cell.count=h1048_sumc)
+# plot(log2(cell.count)-log2(cell.count)[1] ~ time, data=h1048_sumc, type="l", ylab="Population doublings")
 ```
 
+
+```{r DMS53, fig.height=9, fig.width=6}
+par(mfrow=c(3,2))
+
+invisible(lapply(lcc_cell_lines[lcc_cell_lines!="WM88"], function(cl)
+{
+    dtp <- ctrls[[cl]]
+    invisible(do.call(plotGC, append(getGCargs(dtp, dat.col=c("time","Cell_Count","uid")),
+                                     list(main=paste0(cl,", cell count"), leg=FALSE))))
+    invisible(do.call(plotGC, append(getGCargs(dtp, dat.col=c("time","RLU","uid")),
+                                     list(main=paste0(cl,", lum"), leg=FALSE, ylim=c(-1,3)))))
+    lines(sumc[sumc$cell.line==cl,"time"], sumc[sumc$cell.line==cl,"popdubs"], lwd=3)
+}))
+
+```
+
+
+
+```{r Lum-only}
+lumo <- read.csv("../data/from_CW_via_Slack_20210507/050819_RTglowDF.csv")
+lumo <- lumo[,-1]
+
+lumo_cell_lines <- unique(lumo$cell.line)
+lumo_ctrl_dat <- lapply(lumo_cell_lines, function(cl) lumo[lumo$cell.line==cl & lumo$drug1.conc==0 & lumo$drug1!="DMSO",])
+names(lumo_ctrl_dat) <- lumo_cell_lines
+```
+
+```{r fig.height=6, fig.width=8}
+par(mfrow=c(2,4))
+
+invisible(lapply(lumo_cell_lines, function(cl)
+{
+    dtp <- lumo_ctrl_dat[[cl]]
+    # plot(dtp$TotHour, dtp$RLU)
+    
+    invisible(do.call(plotGC, append(getGCargs(dtp, dat.col=c("TotHour","RLU","well"), arg.name = c("time", "cell.count", "ids")),
+                                     list(main=cl, leg=FALSE))))
+}))
+```
+
+
 ```{r}
-invisible(do.call(plotGC, append(getGCargs(h1048, dat.col=c("time","RLU","uid")),list(main="H1048, lum", leg=FALSE))))
-lines(log2(cell.count)-log2(cell.count)[1] ~ time, data=h1048_sumc, lwd=3)
+corl279 <- lumo_ctrl_dat[['CORL279']]
+
+do.call(plotGC, append(getGCargs(a, dat.col=c("TotHour","RLU","well"), arg.name = c("time", "cell.count", "ids")),
+                                     list(main="CORL279", leg=FALSE)))
 ```
 
