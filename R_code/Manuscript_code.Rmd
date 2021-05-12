@@ -11,7 +11,7 @@ The `diprate` package is available from GitHub here: [dipDRC](https://www.github
 library(diprate)
 ```
 
-## Data assembly
+## Static data
 ```{r Load data}
 static <- read.csv("../data/from_CW_via_Slack_20210507/StaticDF.csv", row.names=1)
 static <- static[order(static$Culture_Type,static$Cell_Line),]
@@ -133,5 +133,105 @@ temp <- lapply(cell_lines, function(cl) {
     text(xr[1]+1, 16, pos=4, paste("=", signif(r2[cl],3)))
 })
 
+```
+
+```{r Lag-linear slope eq 1 model fits, fig.height=3, fig.width=7}
+fitLagLin1 <- function(x, y, start_list=list(lower=5, br=1)) 
+    nls(y ~ lagLine(x=x, lower, slope=1, br),
+        start = start_list,
+        algorithm="port",
+        control=nls.control(maxiter=500)
+        )
+
+par(mfrow=c(2,5))
+lag_linear1_models <- lapply(cell_lines, function(cl) {
+    m <- tryCatch({
+        dat <- static[static$Cell_Line==cl,]
+        culture_type <- unique(dat$Culture_Type)
+        m <- fitLagLin1(log2(dat$Cell_Conc), log2(dat$RLU))
+    }, error=function(e) { return(e) })
+    # if(culture_type == "Adherent") 
+    # {
+    #     xr <- c(4,12)
+    # } else {
+    #     xr <- c(6,14)
+    # }
+    xr <- c(0,14)
+    plot(log2(RLU) ~ log2(Cell_Conc), data=dat, main=paste0(cl," (",culture_type,")"), xlim=xr, ylim=c(7,18))
+    if(class(m)[1] != "nls")
+    {
+        m <- lm(log2(RLU) ~ log2(Cell_Conc), data=dat[dat$Cell_Conc>1,])
+        abline(m, col="blue", lwd=2)
+    } else {
+        curve(from=0.5,to=18, lagLine(x, lower=coef(m)['lower'], 
+                                      slope=1, 
+                                      br=coef(m)['br']), 
+              col="blue", lwd=2, add=TRUE)
+    }
+    # text(12, 9, paste("Adj R2 ="))
+    return(m)
+})
+names(lag_linear1_models) <- cell_lines
+```
+
+
+
+## Combined cell count & lum data
+
+```{r}
+lcc <- read.csv('../data/from_CW_via_Slack_20210507/20201216_Lum_CellCounts_Thunor.csv', row.names=1)
+lcc <- lcc[,-1]
+lcc$uid <- paste(lcc$upid,lcc$well,sep="_")
+lcc <- lcc[order(lcc$uid,lcc$time),]
+lcc <- lcc[lcc$time <= 96,]
+```
+
+
+```{r}
+lcc_cell_lines <- unique(lcc$cell.line)
+ctrls <- lapply(lcc_cell_lines, function(cl) lcc[lcc$cell.line==cl & lcc$drug1.conc==0,])
+names(ctrls) <- lcc_cell_lines
+```
+
+#### Cell counts
+```{r fig.height=6, fig.width=6}
+par(mfrow=c(2,2))
+invisible(lapply(names(ctrls), function(n) do.call(plotGC, 
+        append(getGCargs(ctrls[[n]], dat.col=c("time","Cell_Count","uid")),list(main=n, leg=FALSE)))))
+```
+#### Luminscence
+```{r Luminescence, fig.height=6, fig.width=6}
+par(mfrow=c(2,2))
+invisible(lapply(names(ctrls), function(n) do.call(plotGC, 
+        append(getGCargs(ctrls[[n]], dat.col=c("time","RLU","uid")),list(main=n, leg=FALSE)))))
+```
+
+```{r DMS53, fig.height=3, fig.width=6}
+dms53 <- ctrls[['DMS53']]
+
+par(mfrow=c(1,2))
+
+invisible(do.call(plotGC, append(getGCargs(dms53),list(main="DMS53, cell count", leg=FALSE))))
+invisible(do.call(plotGC, append(getGCargs(dms53, dat.col=c("time","RLU","uid")),list(main="DMS53, lum", leg=FALSE))))
+```
+
+```{r H1048, fig.height=3, fig.width=6}
+h1048 <- ctrls[['H1048']]
+
+par(mfrow=c(1,2))
+
+invisible(do.call(plotGC, append(getGCargs(h1048, dat.col=c("time","Cell_Count","uid")),list(main="H1048, cell count", leg=FALSE))))
+invisible(do.call(plotGC, append(getGCargs(h1048, dat.col=c("time","RLU","uid")),list(main="H1048, lum", leg=FALSE))))
+```
+#### Sum of all control cell counts at each time point
+```{r}
+h1048_sumc <- sapply(unique(h1048$time), function(i) sum(h1048[h1048$time==i,"Cell_Count"]))
+h1048_sumc <- data.frame(time=unique(h1048$time), cell.count=h1048_sumc)
+plot(log2(cell.count)-log2(cell.count)[1] ~ time, data=h1048_sumc, type="l", ylab="Population doublings")
+```
+
+```{r}
+invisible(do.call(plotGC, append(getGCargs(h1048, dat.col=c("time","RLU","uid")),list(main="H1048, lum", leg=FALSE))))
+lines(log2(cell.count)-log2(cell.count)[1] ~ time, data=h1048_sumc, lwd=3)
 ```
 
