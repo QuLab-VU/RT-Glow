@@ -27,7 +27,26 @@ static <- static[!(static$Cell_Line=="CORL279" & static$RLU < 10),]
 
 ## Code for reproducing figures
 ### Correlation between luminescence and cell count
-```{r Cell count & luminescence, fig.height=3, fig.width=7}
+```{r Cell count & luminescence linear scale, fig.height=3, fig.width=7}
+par(mfrow=c(2,5))
+linear_models_linscale <- lapply(cell_lines, function(cl) {
+        dat <- static[static$Cell_Line==cl,]
+        culture_type <- unique(dat$Culture_Type)
+        m <- lm(RLU ~ Cell_Conc, data = dat)
+        yr <- c(0,max(dat$RLU))
+        plot(RLU ~ Cell_Conc, data=dat, main=paste0(cl," (",culture_type,")")
+             #, xlim=c(0,14), ylim=c(7,18)
+             )
+        abline(m, col="blue")
+        text(0, yr[2], pos=4, paste("slope =",signif(f2[cl,2],3)))
+        text(0, yr[2]-(yr[2]*.05), pos=4, expression(R^2))
+        text(200, yr[2]-(yr[2]*.05), pos=4, paste("=", signif(r2[cl],3)))
+        return(m)
+    })
+names(linear_models_linscale) <- cell_lines
+```
+
+```{r Cell count & luminescence log scale, fig.height=3, fig.width=7}
 par(mfrow=c(2,5))
 linear_models <- lapply(cell_lines, function(cl) {
         dat <- static[static$Cell_Line==cl,]
@@ -178,6 +197,9 @@ names(lag_linear1_models) <- cell_lines
 
 
 ## Combined cell count & lum data
+Cells seeded on Dec 15
+Drug added:2 pm Dec 16; 60 + 20 µl of drug
+Data acquisition began: 
 
 ```{r}
 lcc <- read.csv('../data/from_CW_via_Slack_20210507/20201216_Lum_CellCounts_Thunor.csv', row.names=1, as.is=TRUE)
@@ -266,7 +288,13 @@ invisible(lapply(lumo_cell_lines, function(cl)
 ```{r}
 corl279 <- lumo_ctrl_dat[['CORL279']]
 
+a <- subset(corl279, grepl("12", corl279$well) )
+
 do.call(plotGC, append(getGCargs(a, dat.col=c("TotHour","RLU","well"), arg.name = c("time", "cell.count", "ids")),
                                      list(main="CORL279", leg=FALSE)))
+```
+
+```{r}
+dms53 <- ctrls[["DMS53"]]
 ```
 
