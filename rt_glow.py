@@ -17,14 +17,12 @@ Model()
 # 2 Cell* -> Cell*  (kdiv_u-kdth_u)/CC
 
 # Pro + Cell -> Sub + Cell  k_pro_to_sub
-# Sub + E -> Light + E (MM)  kcat/(Km + [Sub])
-# Light -> 0  1/tau
+# Sub + E -> E  kcat/(Km + [Sub])
 
 Monomer('Cell', ['state'], {'state' : ['u', 'd']})
 Monomer('Drug')
 Monomer('Pro')
 Monomer('Sub')
-Monomer('Light')
 Monomer('Enzyme')
 
 Initial(Cell(state='u'), Parameter('Cell_0', 100))
@@ -63,10 +61,7 @@ Rule('Pro_to_Sub', Pro() + Cell() >> Sub() + Cell(), k_pro_to_sub)
 Parameter('kcat_Et', 1e5)
 Parameter('Km', 1)
 Expression('rate_emit', kcat_Et/(Km + Sub_tot))
-Rule('Sub_emits_Light', Sub() >> Light(), rate_emit)
-
-Parameter('k_decay', 0.1)
-Rule('Light_decays', Light() >> None, k_decay)
+Rule('Sub_emits_Light', Sub() >> None, rate_emit)
 
 tspan = np.linspace(0, 3, 301)
 sim = ScipyOdeSimulator(model, verbose=True)

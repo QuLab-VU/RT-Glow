@@ -11,8 +11,6 @@ Monomer('Drug')
 Monomer('NanoLuc', ['BindingSite'])
 Monomer('ProSubstrate', ['BindingSiteNADPH_OR_and_NL', 'state'], {'state': ['ProSub', 'Substrate']})
 
-
-
 #starting parameters
 Parameter('K3', 2.011170567427241320e-04)   # estimated
 Parameter('K5', 1.0) # [1/day] ... time unit!  not estimated
@@ -28,7 +26,6 @@ Parameter('K5d', 1.0)     # estimated -> encode in costfunction (if check fails 
 Parameter('K6d', 1.0)     # estimated k6d >= k6
 
 Parameter('Gain', 8.0)   # not estimated
-
 
 #=====drug reaction for both cell states (w/wo NADPHoxidoreductase1) react with drug
 Rule('DrugReaction', Cells(drug='undrugged') + Drug() >> Cells(drug='drugged') + Drug(), kon)
@@ -53,7 +50,6 @@ Rule('carrying_capacity_nodrug', Cells(drug='undrugged') >> None, confluency_nod
 Expression('confluency_drug', Live_Cells*(K5d-K6d)/cc)
 Rule('carrying_capacity_drug', Cells(drug='drugged') >> None, confluency_drug)
 
-
 Parameter('Cells_0', 1572)
 Parameter('NanoLuc_0', 209424)
 Parameter('ProSubstrate_0', 9e8)
@@ -61,10 +57,8 @@ Parameter('Drug_0', 0)
 
 Initial(Cells(NADPHoxidoreductase1=None, drug='undrugged'), Cells_0)
 Initial(Drug(), Drug_0)
-print(Drug(), type(Drug()))
 Initial(NanoLuc(BindingSite=None), NanoLuc_0)
 Initial(ProSubstrate(BindingSiteNADPH_OR_and_NL=None, state='ProSub'), ProSubstrate_0)
-
 
 Observable('Unconverted_Prosubstrate', ProSubstrate(BindingSiteNADPH_OR_and_NL=None, state='ProSub'))
 Observable('Converted_Prosubstrate', ProSubstrate(BindingSiteNADPH_OR_and_NL=None, state='Substrate'))
