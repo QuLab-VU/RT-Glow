@@ -1,7 +1,10 @@
 # from model_H841_k3d import model
 from model_H841 import model
 from simplepso.pso import PSO
+from model_H841_k3d import model
+import os
 import pandas as pd
+#os.environ['BNGPATH'] = r'C:\Users\pinojc\Desktop\BioNetGen-2.5.1'
 import numpy as np
 import matplotlib.pyplot as plt
 from pysb.simulator import ScipyOdeSimulator #, BngSimulator
