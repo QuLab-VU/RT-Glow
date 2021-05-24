@@ -268,6 +268,7 @@ def convert_to_flat_array(optimizer, model):
 #     print(fitness.shape)
 #     print(history.shape)
 #     quit()
+    
     col_names = list(param_names[rate_mask]) + ['fitness']
 #     print(col_names)
 

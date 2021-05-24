@@ -1,0 +1,271 @@
+---
+title: "RT-Glo Cytation 2020-10-08 analysis"
+author: "Darren Tyson"
+date: "03/10/2021"
+output: html_notebook
+---
+
+#### Data from Cytation experiment performed 2020-12-14
+Combined luminescence and imaging reads of several SCLC and melanoma cell lines treated with various drugs and concentrations.  
+
+NOTE: Some contamination (bacterial? fungal?) was visible in some cell culture vessels prior to experiment (per Clayton Wandishin).  
+
+
+```{r Setup}
+library(diprate)
+
+closestTime <- function (mytime, timevec, direction = "", out = "pos")
+{
+    sapply(mytime, function(mt) 
+    {
+        difft <- switch(direction,
+                        before = -difftime(timevec, mt),
+                        after = -difftime(mt, timevec),
+                        abs(difftime(mt, timevec))
+                        )
+        if(direction %in% c("before","after"))
+        {
+            mindiff = ifelse(length(difft[difft>=0]) == 0, NA, min(difft[difft>=0]))
+            if(is.na(mindiff))
+            {
+                r <- NA
+            } else {
+                r <- as.vector(switch(out,
+                                      time = timevec[which(difft == min(difft[difft>=0]) )],
+                                      pos = which(difft == min(difft[difft>=0])),
+                                      amt = min(difft[difft>=0])
+                                      )
+                               )
+            }
+        } else {
+            r <- switch(out,
+                        time = as.character(timevec[which(difft == min(difft))]),
+                        pos = which(difft == min(difft)),
+                        amt = min(difft)
+                        )
+        }
+        return(r)
+    })
+}
+
+getDateTime <- function(dname)
+{
+    o <- dname[grepl("[0-9]{6}_*[0-9]{6}",dname)]
+    if(all(grepl("[0-9]{12}",o)))
+    {
+        mytime <- strptime(o, '%y%m%d%H%M%S')
+    } else {
+        mytime <- paste(sapply(strsplit(o,'_'), '[[', 1),
+            sapply(strsplit(o,'_'), '[[', 2), sep='_')
+        mytime <- strptime(mytime, '%y%m%d_%H%M%S')
+    }
+    names(mytime) <- NULL
+    return(mytime)
+}
+```
+
+#### Data assembly
+Data were not completely compiled into a single dataframe for analysis. Must assemble prior to analysis.
+
+```{r}
+TOPDIR <- "../data/20201216_Lum_Image_Run/"
+# Momentum log path
+ml_path <- file.path(TOPDIR,'MOMENTUM_LOGS_FOR_V004831B_20201214_100msRFP_10msGFP_20201216_153632_0.txt')
+# Momentum log
+ml <- read.csv(ml_path, header=FALSE, skip=5, as.is=TRUE, sep='\t')
+# Index of rows with reads
+read_i <- which(ml$V6=='Read')
+# Keep only relevant columns
+ml <- ml[read_i,c('V1','V6','V7','V12','V13','V14')]
+# Rename columns
+colnames(ml) <- c('instrument','action','id','start.time','end.time','barcode')
+rownames(ml) <- NULL
+
+
+lum <- read.csv(file.path(TOPDIR,'CombinedLuminescenceTOTAL.csv'), as.is=TRUE, row.names=1)
+# Cell counts = cc
+cc <- read.csv(file.path(TOPDIR,'Cellcounts_20201214.csv'), as.is=TRUE)
+cc <- cc[order(cc$plate_id,cc$well),]
+
+# standardize colnames
+colnames(cc) <- gsub("_",".",colnames(cc))
+```
+
+#### Data munging
+Luminescence data already has most annotation associated with it, including plate barcode (ID), cell line, drug, drug conc, time and well. The times were parsed from the filenames of the raw luminescence data (see [../data/20201216_Lum_Image_Run/MultiPlateMultiFileMergeLum20201216_special.py])  
+
+Momentum log should have times matching (or very similar to) these values. Must make sure they're in the same format. Use the `closestTime` function to obtain the position in the 
+
+The cell counts were obtained from two different positions within each well. These values should be summed and same for the counts of nuclei that are positive in the second channel (the dead-cell stain; `ch2_pos`).
+
+```{r Time matching}
+# Cell count image file path =  ccifp; from task arguments sent to py-seg image processing pipeline
+ccifp <- read.csv(file.path(TOPDIR,'TaskArgs_20201214.csv'))$nuc_im_path
+# Find times for each unique plate
+ccifp <- gsub("/mnt/monica/quaranta2/Cytation/2020-12-14/images/","",ccifp)
+ccifp <- unique(sapply(strsplit(ccifp, "/"), "[[", 1))
+
+# get plate IDs from number after "Experiment"; should match Momentum log
+pid <- as.integer(sapply(strsplit(ccifp,"Experiment"), "[[", 2))
+names(pid) <- getDateTime(ccifp)
+
+cc$image.time <- names(pid)[match(cc$plate.id,pid)]
+
+# standardize lum colnames
+colnames(lum) <- gsub("_",".",tolower(colnames(lum)))
+if(!any(grepl("drug1",colnames(lum)))) colnames(lum) <- gsub("drug","drug1",colnames(lum))
+colnames(lum)[colnames(lum)=="tothour.lum"] <- "time"
+colnames(lum)[colnames(lum)=="datetime.lum"] <- "lum.time"
+
+# ulfst = unique lum file save times
+ulfst <- unique(lum$lum.time)
+
+# plate name (barcode from Momentum log)
+# pn <- ml[closestTime(unique(cc$image.time),ml[grepl('RFP',ml$id),'start.time.rfmt']),'barcode']
+# plate name (from lum)
+pn <- lum[closestTime(unique(cc$image.time),unique(lum$lum.time),direction="before"),'plate.name']
+names(pn) <- unique(cc$image.time)
+
+# add plate.name (barcode) to cc
+cc$plate.name <- pn[match(cc$image.time,names(pn))]
+
+
+# must sum cell counts and ch2_pos per uid2 (unique for each time point) 
+cc$uid <- paste(cc$plate.id,cc$well,sep="_")
+cc$uid2 <- paste(cc$uid,cc$plate.id,sep="_")
+cc_temp <- cc[!duplicated(cc$uid2),]
+cc_temp$cell.count <- sapply(unique(cc$uid2), function(x) sum(cc[cc$uid2==x,'cell.count']))
+cc_temp$ch2.pos <- sapply(unique(cc$uid2), function(x) sum(cc[cc$uid2==x,'ch2.pos']))
+
+# time lookup table: cc image times as names, lum file save times as values
+time_lut <- closestTime(unique(cc_temp$image.time),ulfst,direction="before",out="time")
+
+# Add luminescence read times; note that the first luminescence read is missing
+cc_temp$lum.time <- time_lut[cc_temp$image.time]
+
+# remove unneeded columns from cc_temp
+cc_temp <- cc_temp[,c("plate.name","image.time","lum.time","well","cell.count","ch2.pos")]
+# first plate did not get luminescence read; must pull info from Momentum logs or remove
+cc_temp <- cc_temp[!is.na(cc_temp$plate.name),]
+cc_temp$uid <- paste(cc_temp$plate.name,cc_temp$well,cc_temp$lum.time, sep="_")
+
+lum$uid <- paste(lum$plate.name,lum$well,lum$lum.time, sep="_")
+
+
+
+
+# ml$start.time.rfmt <- strptime(ml$start.time, format="%m/%d/%Y %r")
+# ml$end.time.rfmt <- strptime(ml$end.time, format="%m/%d/%Y %r")
+# ml$image.time <- unique(cc$image.time)[closestTime(ml$start.time.rfmt,unique(cc$image.time))]
+
+
+```
+
+## NOTE: plate names and times do not match between imaging and lum
+Try to use momentum log to reconcile
+
+
+### Stop here
+
+
+#### Not yet incorporated with above
+DO NOT RUN
+
+```{r fig.height=5, fig.width=5}
+cont <- d[d$drug1.conc==0,]
+#do.call(plotGC, getGCargs(cont[cont$well %in% c('B11','C11','D11'),], 
+#                          dat.col = c("time", "cell.count", "well")))
+invisible(do.call(plotGC, getGCargs(cont, 
+                          dat.col = c("time", "cell.count", "well"))))
+
+```
+
+# Sum cell counts across wells in same condition 
+To facilitate visualization due to the low cell numbers visible within each field of view. 
+```{r}
+d$ucond <- paste(d$drug1,d$drug1.conc,d$time,sep='_')
+a <- d[order(d$ucond),]
+a_counts <- sapply(unique(a$ucond), function(x) sum(a[a$ucond==x,'cell.count']))
+a_counts_ch2 <- sapply(unique(a$ucond), function(x) sum(a[a$ucond==x,'ch2.pos']))
+a <- a[!duplicated(a$ucond),]
+a$cell.count <- a_counts
+a$ch2.pos <- a_counts_ch2
+a <- a[order(a$well,a$time),]
+```
+
+### Examine control wells
+```{r fig.height=5, fig.width=5}
+cont <- a[a$drug1.conc==0,]
+cont <- cont[order(cont$well,cont$time),]
+
+invisible(do.call(plotGC, getGCargs(cont, 
+                          dat.col = c("time", "cell.count", "well"))))
+```
+
+```{r fig.height=5, fig.width=5}
+invisible(do.call(plotGC, append(getGCargs(a[a$drug1=='TAK-901',], 
+                          dat.col = c("time", "cell.count", "drug1.conc")),
+                          list(main='HEK293 + TAK-901', ylab='Population doublings'))))
+```
+#### Luminescence reads
+Read in data, reformat and replace time with image time for direct comparisons
+```{r}
+lum <- read.csv("../data/HEK293lum.csv", as.is=TRUE)
+lum_time <- lum[,1]
+lum2 <- as.matrix(lum[,-1])
+wells <- fixWellName(colnames(lum)[-1])
+lum <- data.frame(time=rep(unique(d$time)), 
+                       lum=as.vector(lum2), 
+                       well=rep(wells, each=length(unique(d$time))))
+lum$uid <- paste(match(lum$time, unique(lum$time)), lum$well, sep="_")
+lum <- addMapInfo(lum,"../data/201008_185701_Experiment1_platemap.tsv")
+```
+
+```{r}
+lum$ucond <- paste(lum$drug1,lum$drug1.conc,lum$time,sep='_')
+a2 <- lum[order(lum$ucond),]
+a2_lum <- sapply(unique(a2$ucond), function(x) sum(a2[a2$ucond==x,'lum']))
+a2 <- a2[!duplicated(a2$ucond),]
+a2$lum <- a2_lum
+a2 <- a2[order(a2$well,a2$time),]
+```
+
+#### Combine all data
+All data should be aligned by row such that can simply add luminescence reads to cell count data.
+```{r}
+if(all(a$uid==a2$uid)) 
+{
+    a$lum <- a2$lum
+} else {
+    message('Cell count data and luminescence data not aligned!')
+}
+```
+
+```{r}
+plot(a$cell.count, a$lum)
+```
+#### Only control wells exhibiting clear exponential growth
+By visual inspection of cell count growth curves, combined wells B11, C11 and D11 (saved into B11) demonstrated exponential growth after ~60 h. Use
+```{r fig.height=4, fig.width=4}
+a2 <- a[a$well=="B11",]
+plot(lum ~ cell.count, data=a2, 
+     xlab="Cell count", ylab="Luminescence", main="HEK293 control wells")
+```
+Correlation of luminescence to cell counts in control wells
+```{r}
+round(cor(a2$cell.count,a2$lum),4)
+```
+
+### Save combined data file
+Only save if file does not already exist.
+```{r}
+dfn <- "../data/2020-10-08_Cytation_data_sum_by_condition.csv"
+if(!file.exists(dfn)) write.csv(a, file=dfn, row.names=FALSE)
+```
+Also save data with all wells included
+```{r}
+d$lum <- lum$lum
+cfn <- "../data/2020-10-08_Cytation_data_counts+lum.csv"
+if(!file.exists(cfn)) write.csv(d, file=dfn, row.names=FALSE)
+```
+

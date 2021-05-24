@@ -1,0 +1,72 @@
+---
+title: "Analysis of 2020-11-03 cell count + lum data"
+output: html_notebook
+---
+
+```{r Setup}
+library("diprate")
+library("platetools")
+library("ggplot2")
+```
+
+```{r Load data}
+d <- read.csv("../data/2020-11-03_lum&cell_counts.csv", as.is=TRUE)
+d$time <- round(d$time,2)
+d$orig.cell.count <- d$cell.count
+d$cell.count <- d$orig.cell.count - d$ch2.pos
+d$cell.count <- sapply(d$cell.count, function(x) ifelse(x <= 0, 1, x))
+```
+
+#### Examine 293FT data
+First, use a single cell line in control conditions to assess population growth.
+```{r}
+a <- d[d$cell.line=="293FT" & d$drug1.conc==0,]
+```
+
+```{r Plot 293FT control wells, fig.height=8, fig.width=8}
+invisible(do.call(plotGC, getGCargs(a)))
+```
+Find wells where the cell counts reach a high value.
+```{r}
+x <- a[a$well %in% c("F13","G13","H13"),]
+invisible(plotGC(x$time,x$cell.count,x$uid))
+```
+
+```{r}
+x <- a[a$well %in% c("F13","G13","H13"),]
+invisible(plotGC(x$time,x$RLU,x$uid))
+```
+
+```{r}
+plot(a$cell.count ~ a$RLU)
+```
+
+```{r RLU, fig.height=8, fig.width=8}
+invisible(do.call(plotGC, getGCargs(a, dat.col = c("time", "RLU", "uid"))))
+```
+
+
+#### Get DIP rates from test plate
+Will use to assess variation across plate.
+```{r}
+b <- d[d$cell.line=="293FT",]
+
+dipr <- lapply(unique(b$uid), function(id) tryCatch(
+    {
+        findDIP(b[b$uid==id,c('time','cell.count','uid')])
+    },error=function(cond) {NA})
+)
+names(dipr) <- unique(b$uid)
+
+rates <- b[!duplicated(b$uid),]
+rates <- rates[,!colnames(rates) %in% c('time','plate.id','image.time','cell.count')]
+rates$rate <- sapply(rates$uid, function(id) dipr[[id]]$dip)
+rates$rate.95ci <- sapply(rates$uid, function(id) dipr[[id]]$dip.95ci)
+
+```
+
+```{r Heatmap of DIP rates}
+platetools::raw_map(data=rates$rate, well=rates$well, plate=384) + scale_fill_gradient2()
+```
+
+
