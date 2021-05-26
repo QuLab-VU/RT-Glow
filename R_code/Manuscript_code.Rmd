@@ -27,7 +27,7 @@ static <- static[!(static$Cell_Line=="CORL279" & static$RLU < 10),]
 
 ## Code for reproducing figures
 ### Correlation between luminescence and cell count
-```{r Cell count & luminescence linear scale, fig.height=3, fig.width=7}
+```{r Cell count & luminescence linear scale, eval=FALSE, fig.height=3, fig.width=7, include=FALSE}
 par(mfrow=c(2,5))
 linear_models_linscale <- lapply(cell_lines, function(cl) {
         dat <- static[static$Cell_Line==cl,]
@@ -245,7 +245,7 @@ sumc$cell.line <- as.character(sumc$cell.line)
 ```
 
 
-```{r DMS53, fig.height=9, fig.width=6}
+```{r cell count to lum, fig.height=9, fig.width=6}
 par(mfrow=c(3,2))
 
 invisible(lapply(lcc_cell_lines[lcc_cell_lines!="WM88"], function(cl)
@@ -290,11 +290,54 @@ corl279 <- lumo_ctrl_dat[['CORL279']]
 
 a <- subset(corl279, grepl("12", corl279$well) )
 
-do.call(plotGC, append(getGCargs(a, dat.col=c("TotHour","RLU","well"), arg.name = c("time", "cell.count", "ids")),
-                                     list(main="CORL279", leg=FALSE)))
+invisible(do.call(plotGC, append(getGCargs(a, dat.col=c("TotHour","RLU","well"), arg.name = c("time", "cell.count", "ids")),
+                                     list(main="CORL279", leg=FALSE))))
 ```
 
 ```{r}
 dms53 <- ctrls[["DMS53"]]
+```
+
+```{r}
+sapply(lag_linear1_models, function(x) coef(x)[1]-coef(x)[2])
+```
+
+```{r}
+par(mfrow=c(2,3))
+
+invisible(lapply(lcc_cell_lines[lcc_cell_lines!="WM88"], function(cl)
+{
+    dtp <- ctrls[[cl]]
+    invisible(do.call(plotGC, append(getGCargs(dtp, dat.col=c("time","RLU","uid")),
+                                     list(main=paste0(cl,", lum"), leg=FALSE, ylim=c(-1,3)))))
+    lines(sumc[sumc$cell.line==cl,"time"], sumc[sumc$cell.line==cl,"popdubs"], lwd=3)
+}))
+invisible(lapply(lcc_cell_lines[lcc_cell_lines!="WM88"], function(cl)
+{
+    dtp <- ctrls[[cl]]
+    plot()
+    lines(sumc[sumc$cell.line==cl,"time"], sumc[sumc$cell.line==cl,"popdubs"], lwd=3)
+}))
+
+```
+
+```{r}
+d <- read.csv("../data/20201216_Lum_Image_Run/20201216_Lum_CellCounts_TOTAL.csv", row.names = 1)
+d$uid <- paste(d$Plate_Name,d$Well,sep="_")
+d <- d[order(d$uid,d$TotHour_Lum),]
+d <- d[d$TotHour_Lum <= 96,]
+# conform all data is same as Thunor
+all(lcc$Cell_Count==d$Cell_Count)
+```
+
+```{r fig.height=2, fig.width=6}
+par(mfrow=c(1,3))
+
+invisible(lapply(lcc_cell_lines[lcc_cell_lines!="WM88"], function(cl)
+{
+    dtp <- d[d$Cell_Line==cl & d$Drug=="AZD-1152", ]
+    invisible(do.call(plotGC, append(getGCargs(dtp, arg.name = c("time", "cell.count", "ids", "rep"), dat.col=c("TotHour_Lum","RLU","uid","Drug_Conc")),
+                                     list(main=paste0(cl,", lum"), ylim=c(-1,3)))))
+}))
 ```
 
