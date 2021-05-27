@@ -1,9 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import cm
 
 infile = 'data/20201216_Lum_Image_Run/20201216_Lum_CellCounts_TOTAL.csv'
 cell_line = 'H1048'
-drug_name = 'TAK-901'
+drug_name = 'AZD-1152' #'TAK-901'
 
 raw_data = np.genfromtxt(infile, names=True, dtype=None, delimiter=',', encoding='UTF-8')
 # print(raw_data)
@@ -41,7 +42,7 @@ for key in replicates.keys():
     for rep in replicates[key]:
         cell_count_reps[-1].append(rep['Cell_Count'])
         lum_rlu_reps[-1].append(rep['RLU'])
-    t_cell_count.append(replicates[key][0]['TotHour_Image']/24.) # time in days
+    t_cell_count.append(replicates[key][0]['TotHour_Image'] / 24.) # time in days
     t_rlu.append(replicates[key][0]['TotHour_Lum'] / 24.)  # time in days
     cell_count_mean.append(np.mean(cell_count_reps[-1], axis=0))
     lum_rlu_mean.append(np.mean(lum_rlu_reps[-1], axis=0))
@@ -63,7 +64,10 @@ for i in range(len(drug_conc)):
 print(data_dict.keys())
 dose = 0
 
-for dose in drug_conc*1e9:
+cmap = cm.get_cmap('jet')
+colors = cmap(np.linspace(0,1,len(drug_conc)))
+
+for dose,color in zip(drug_conc*1e9,colors):
 
     start_idx = 0
 
@@ -72,13 +76,13 @@ for dose in drug_conc*1e9:
     init = data_dict['cells_%gnM_mean' % dose][start_idx]
     plt.plot(data_dict['t_cell_count_%gnM' % dose][start_idx:],
              np.log2(data_dict['cells_%gnM_mean' % dose][start_idx:]/init),
-             lw=2, label = '%g nM' % dose)
+             color=color, lw=2, label = '%g nM' % dose)
     # replicates
     # for i in range(3):
-    #     init = data_dict['cells_%gnM_rep%d' % (dose,i)][0]
+    #     init = data_dict['cells_%gnM_rep%d' % (dose,i)][start_idx]
     #     plt.plot(data_dict['t_cell_count_%gnM' % dose], np.log2(data_dict['cells_%gnM_rep%d' % (dose,i)]/init), 'x')
     plt.xlabel('time (day)')
-    plt.ylabel('cell count')
+    plt.ylabel('log2(cell count)')
     plt.legend(loc=0, ncol=3)
     plt.tight_layout()
 
@@ -86,12 +90,12 @@ for dose in drug_conc*1e9:
     plt.figure('lum')
     init = data_dict['lum_%gnM_mean' % dose][start_idx]
     plt.plot(data_dict['t_rlu_%gnM' % dose][start_idx:],
-             np.log2(data_dict['lum_%gnM_mean' % dose][start_idx:]/init),
-             lw=2, label = '%g nM' % dose)
+             data_dict['lum_%gnM_mean' % dose][start_idx:]/init,
+             color=color, lw=2, label = '%g nM' % dose)
     # replicates
     # for i in range(3):
-    #     init = data_dict['lum_%gnM_rep%d' % (dose,i)][0]
-    #     plt.plot(data_dict['t_rlu_%gnM' % dose], np.log2(data_dict['lum_%gnM_rep%d' % (dose,i)]/init), 'x')
+    #     init = data_dict['lum_%gnM_rep%d' % (dose,i)][start_idx]
+    #     plt.plot(data_dict['t_rlu_%gnM' % dose], data_dict['lum_%gnM_rep%d' % (dose,i)]/init, 'x')
     plt.xlabel('time (day)')
     plt.ylabel('luminescence (RLU)')
     plt.legend(loc=0, ncol=3)
