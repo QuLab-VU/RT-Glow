@@ -206,7 +206,7 @@ lcc <- read.csv('../data/from_CW_via_Slack_20210507/20201216_Lum_CellCounts_Thun
 lcc <- lcc[,-1]
 lcc$uid <- paste(lcc$upid,lcc$well,sep="_")
 lcc <- lcc[order(lcc$uid,lcc$time),]
-lcc <- lcc[lcc$time <= 96,]
+# lcc <- lcc[lcc$time <= 96,]
 ```
 
 
@@ -222,7 +222,7 @@ par(mfrow=c(2,2))
 invisible(lapply(names(ctrls), function(n) do.call(plotGC, 
         append(getGCargs(ctrls[[n]], dat.col=c("time","Cell_Count","uid")),list(main=n, leg=FALSE)))))
 ```
-#### Luminscence
+#### Luminescence
 ```{r Luminescence, fig.height=6, fig.width=6}
 par(mfrow=c(2,2))
 invisible(lapply(names(ctrls), function(n) do.call(plotGC, 
@@ -315,7 +315,7 @@ invisible(lapply(lcc_cell_lines[lcc_cell_lines!="WM88"], function(cl)
 invisible(lapply(lcc_cell_lines[lcc_cell_lines!="WM88"], function(cl)
 {
     dtp <- ctrls[[cl]]
-    plot()
+    plot(log2(RLU) ~ time, data=dtp)
     lines(sumc[sumc$cell.line==cl,"time"], sumc[sumc$cell.line==cl,"popdubs"], lwd=3)
 }))
 
