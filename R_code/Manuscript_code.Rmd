@@ -261,6 +261,34 @@ invisible(lapply(lcc_cell_lines[lcc_cell_lines!="WM88"], function(cl)
 ```
 
 
+```{r cell count to lum v2, fig.height=2, fig.width=8}
+par(mfrow=c(1,3))
+cl <- "H841"
+dtp <- ctrls[[cl]]
+# normalized log2 scale (population doublings)
+invisible(do.call(plotGC, append(getGCargs(dtp, dat.col=c("time","RLU","uid")),
+                                 list(main="H841, lum", leg=FALSE, ylim=c(-1,3)))))
+lines(sumc[sumc$cell.line==cl,"time"], sumc[sumc$cell.line==cl,"popdubs"], lwd=3)
+
+# linear scale (no normalization)
+plot(RLU ~ time, data=dtp, type="n")
+invisible(sapply(unique(dtp$well), function(w) 
+    lines(dtp[dtp$well==w,"time"],dtp[dtp$well==w,"RLU"], col="blue")))
+
+# linear scale, proportional to time 0
+plot(0:200, 0:200, type="n", ylim=c(0,10))
+invisible(sapply(unique(dtp$well), function(w) 
+    lines(dtp[dtp$well==w,"time"],dtp[dtp$well==w,"RLU"]/dtp[dtp$well==w,"RLU"][1], col="blue")))
+```
+
+```{r}
+# log scale (no normalization)
+plot(log2(RLU) ~ time, data=dtp, type="n")
+invisible(sapply(unique(dtp$well), function(w) 
+    lines(dtp[dtp$well==w,"time"],log2(dtp[dtp$well==w,"RLU"]), col="blue")))
+lines(sumc[sumc$cell.line==cl,"time"], sumc[sumc$cell.line==cl,"cell.count"], lwd=3)
+```
+
 
 ```{r Lum-only}
 lumo <- read.csv("../data/from_CW_via_Slack_20210507/050819_RTglowDF.csv")
