@@ -1,0 +1,371 @@
+---
+title: "Real-time luminescence enables estimation of drug-induced proliferation rates in adherent and suspension cell lines"
+author: "Darren Tyson & Clayton Wandishin"
+date: "05/09/2021"
+output: html_notebook
+---
+
+## Required R packages
+The `diprate` package is available from GitHub here: [dipDRC](https://www.github.com/Qulab-VU/dipDRC)
+```{r Setup}
+library(diprate)
+options(stringsAsFactors=FALSE)
+```
+
+## Static data
+```{r Load data}
+static <- read.csv("../data/from_CW_via_Slack_20210507/StaticDF.csv", row.names=1)
+static <- static[order(static$Culture_Type,static$Cell_Line),]
+static[static$Cell_Conc==0,"Cell_Conc"] <- 1
+cell_lines <- unique(static$Cell_Line)
+```
+#### Outlier value in CORL279
+```{r}
+static <- static[!(static$Cell_Line=="CORL279" & static$RLU < 10),]
+```
+
+
+## Code for reproducing figures
+### Correlation between luminescence and cell count
+```{r Cell count & luminescence linear scale, eval=FALSE, fig.height=3, fig.width=7, include=FALSE}
+par(mfrow=c(2,5))
+linear_models_linscale <- lapply(cell_lines, function(cl) {
+        dat <- static[static$Cell_Line==cl,]
+        culture_type <- unique(dat$Culture_Type)
+        m <- lm(RLU ~ Cell_Conc, data = dat)
+        yr <- c(0,max(dat$RLU))
+        plot(RLU ~ Cell_Conc, data=dat, main=paste0(cl," (",culture_type,")")
+             #, xlim=c(0,14), ylim=c(7,18)
+             )
+        abline(m, col="blue")
+        text(0, yr[2], pos=4, paste("slope =",signif(f2[cl,2],3)))
+        text(0, yr[2]-(yr[2]*.05), pos=4, expression(R^2))
+        text(200, yr[2]-(yr[2]*.05), pos=4, paste("=", signif(r2[cl],3)))
+        return(m)
+    })
+names(linear_models_linscale) <- cell_lines
+```
+
+```{r Cell count & luminescence log scale, fig.height=3, fig.width=7}
+par(mfrow=c(2,5))
+linear_models <- lapply(cell_lines, function(cl) {
+        dat <- static[static$Cell_Line==cl,]
+        culture_type <- unique(dat$Culture_Type)
+        m <- lm(log2(RLU) ~ log2(Cell_Conc), data = dat)
+        plot(log2(RLU) ~ log2(Cell_Conc), data=dat, main=paste0(cl," (",culture_type,")"), xlim=c(0,14), ylim=c(7,18))
+        abline(m, col="blue")
+        return(m)
+    })
+names(linear_models) <- cell_lines
+```
+
+#### Need 2-part function to accommodate minimum values
+Assuming first part of data is at some minimum value and not associated with any actual cell count (lower limit of detection), which would result in `slope=0` (values are constant until some minimum number of cells is achieved).
+```{r Lag-linear function}
+lagLine <- function (x, lower, slope, br = 64) sapply(x, function(z) ifelse(z <= br, lower, lower + (z-br) * slope))
+
+fitLagLin <- function(x, y, start_list=list(lower=5, slope=1, br=1)) 
+    nls(y ~ lagLine(x=x, lower, slope, br),
+        start = start_list,
+        algorithm="port",
+        control=nls.control(maxiter=500)
+        )
+```
+
+#### Fit the lag-linear model to data
+```{r Lag-linear model fits, fig.height=3, fig.width=7}
+par(mfrow=c(2,5))
+lag_linear_models <- lapply(cell_lines, function(cl) {
+    m <- tryCatch({
+        dat <- static[static$Cell_Line==cl,]
+        culture_type <- unique(dat$Culture_Type)
+        m <- fitLagLin(log2(dat$Cell_Conc), log2(dat$RLU))
+    }, error=function(e) { return(e) })
+    # if(culture_type == "Adherent") 
+    # {
+    #     xr <- c(4,12)
+    # } else {
+    #     xr <- c(6,14)
+    # }
+    xr <- c(0,14)
+    plot(log2(RLU) ~ log2(Cell_Conc), data=dat, main=paste0(cl," (",culture_type,")"), xlim=xr, ylim=c(7,18))
+    if(class(m)[1] != "nls")
+    {
+        m <- lm(log2(RLU) ~ log2(Cell_Conc), data=dat[dat$Cell_Conc>1,])
+        abline(m, col="blue", lwd=2)
+    } else {
+        curve(from=0.5,to=18, lagLine(x, lower=coef(m)['lower'], 
+                                      slope=coef(m)['slope'], 
+                                      br=coef(m)['br']), 
+              col="blue", lwd=2, add=TRUE)
+    }
+    # text(12, 9, paste("Adj R2 ="))
+    return(m)
+})
+names(lag_linear_models) <- cell_lines
+```
+
+
+#### Try eliminating controls
+Assume all luminescence values with cells produce detectable signal.
+```{r Cell count & luminescence minus control, fig.height=3, fig.width=7}
+par(mfrow=c(2,5))
+linear_models <- lapply(cell_lines, function(cl) {
+        dat <- static[static$Cell_Line==cl & static$Cell_Conc >1,]
+        culture_type <- unique(dat$Culture_Type)
+        m <- lm(log2(RLU) ~ log2(Cell_Conc), data = dat)
+        plot(log2(RLU) ~ log2(Cell_Conc), data=dat, main=paste0(cl," (",culture_type,")"), xlim=c(0,14), ylim=c(7,18))
+        abline(m, col="blue")
+        return(m)
+    })
+names(linear_models) <- cell_lines
+```
+
+
+
+#### Compare to linear models
+Assuming the lowest number of cells is above the threshold of detection, will remove the no cells control and fit remaining data.
+```{r}
+dat <- static[static$Cell_Conc > 1,]
+m2 <- lme4::lmList(log2(RLU) ~ log2(Cell_Conc) | Cell_Line, data=dat)
+f2 <- coef(m2)
+r2 <- unlist(summary(m2)$adj.r.squared)
+```
+
+```{r Linear models, fig.height=3, fig.width=7}
+par(mfrow=c(2,5))
+temp <- lapply(cell_lines, function(cl) {
+    dtp <- dat[dat$Cell_Line==cl,]
+    culture_type <- unique(dtp[dtp$Cell_Line==cl,'Culture_Type'])
+    if(culture_type == "Adherent") 
+    {
+        xr <- c(5,12)
+    } else {
+        xr <- c(7,14)
+    }
+    plot(log2(RLU) ~ log2(Cell_Conc), 
+         data=dtp, 
+         main=paste0(cl," (",culture_type,")"), 
+         xlim=xr, ylim=c(7,18))
+    abline(m2[[cl]], col="blue", lwd=2)
+    text(xr[1]+0.25, 17, pos=4, paste("slope =",signif(f2[cl,2],3)))
+    text(xr[1]+0.25, 16, pos=4, expression(R^2))
+    text(xr[1]+1, 16, pos=4, paste("=", signif(r2[cl],3)))
+})
+
+```
+
+```{r Lag-linear slope eq 1 model fits, fig.height=3, fig.width=7}
+fitLagLin1 <- function(x, y, start_list=list(lower=5, br=1)) 
+    nls(y ~ lagLine(x=x, lower, slope=1, br),
+        start = start_list,
+        algorithm="port",
+        control=nls.control(maxiter=500)
+        )
+
+par(mfrow=c(2,5))
+lag_linear1_models <- lapply(cell_lines, function(cl) {
+    m <- tryCatch({
+        dat <- static[static$Cell_Line==cl,]
+        culture_type <- unique(dat$Culture_Type)
+        m <- fitLagLin1(log2(dat$Cell_Conc), log2(dat$RLU))
+    }, error=function(e) { return(e) })
+    # if(culture_type == "Adherent") 
+    # {
+    #     xr <- c(4,12)
+    # } else {
+    #     xr <- c(6,14)
+    # }
+    xr <- c(0,14)
+    plot(log2(RLU) ~ log2(Cell_Conc), data=dat, main=paste0(cl," (",culture_type,")"), xlim=xr, ylim=c(7,18))
+    if(class(m)[1] != "nls")
+    {
+        m <- lm(log2(RLU) ~ log2(Cell_Conc), data=dat[dat$Cell_Conc>1,])
+        abline(m, col="blue", lwd=2)
+    } else {
+        curve(from=0.5,to=18, lagLine(x, lower=coef(m)['lower'], 
+                                      slope=1, 
+                                      br=coef(m)['br']), 
+              col="blue", lwd=2, add=TRUE)
+    }
+    # text(12, 9, paste("Adj R2 ="))
+    return(m)
+})
+names(lag_linear1_models) <- cell_lines
+```
+
+
+
+## Combined cell count & lum data
+Cells seeded on Dec 15
+Drug added:2 pm Dec 16; 60 + 20 µl of drug
+Data acquisition began: 
+
+```{r}
+lcc <- read.csv('../data/from_CW_via_Slack_20210507/20201216_Lum_CellCounts_Thunor.csv', row.names=1, as.is=TRUE)
+lcc <- lcc[,-1]
+lcc$uid <- paste(lcc$upid,lcc$well,sep="_")
+lcc <- lcc[order(lcc$uid,lcc$time),]
+# lcc <- lcc[lcc$time <= 96,]
+```
+
+
+```{r}
+lcc_cell_lines <- unique(lcc$cell.line)
+ctrls <- lapply(lcc_cell_lines, function(cl) lcc[lcc$cell.line==cl & lcc$drug1.conc==0,])
+names(ctrls) <- lcc_cell_lines
+```
+
+#### Cell counts
+```{r fig.height=6, fig.width=6}
+par(mfrow=c(2,2))
+invisible(lapply(names(ctrls), function(n) do.call(plotGC, 
+        append(getGCargs(ctrls[[n]], dat.col=c("time","Cell_Count","uid")),list(main=n, leg=FALSE)))))
+```
+#### Luminescence
+```{r Luminescence, fig.height=6, fig.width=6}
+par(mfrow=c(2,2))
+invisible(lapply(names(ctrls), function(n) do.call(plotGC, 
+        append(getGCargs(ctrls[[n]], dat.col=c("time","RLU","uid")),list(main=n, leg=FALSE)))))
+```
+
+#### Sum of all control cell counts at each time point
+```{r}
+sumc <- do.call(rbind, lapply(lcc_cell_lines, function(cl) 
+    {
+        counts <- sapply(unique(ctrls[[cl]]$time), function(i) 
+            sum(ctrls[[cl]][ctrls[[cl]]$time==i,"Cell_Count"]))
+        times <- unique(ctrls[[cl]]$time)
+        data.frame(cell.line=cl, time=times, cell.count=counts)
+}))
+sumc$popdubs <- log2norm(sumc$cell.count,sumc$cell.line)
+sumc$cell.line <- as.character(sumc$cell.line)
+# h1048_sumc <- data.frame(time=unique(h1048$time), cell.count=h1048_sumc)
+# plot(log2(cell.count)-log2(cell.count)[1] ~ time, data=h1048_sumc, type="l", ylab="Population doublings")
+```
+
+
+```{r cell count to lum, fig.height=9, fig.width=6}
+par(mfrow=c(3,2))
+
+invisible(lapply(lcc_cell_lines[lcc_cell_lines!="WM88"], function(cl)
+{
+    dtp <- ctrls[[cl]]
+    invisible(do.call(plotGC, append(getGCargs(dtp, dat.col=c("time","Cell_Count","uid")),
+                                     list(main=paste0(cl,", cell count"), leg=FALSE))))
+    invisible(do.call(plotGC, append(getGCargs(dtp, dat.col=c("time","RLU","uid")),
+                                     list(main=paste0(cl,", lum"), leg=FALSE, ylim=c(-1,3)))))
+    lines(sumc[sumc$cell.line==cl,"time"], sumc[sumc$cell.line==cl,"popdubs"], lwd=3)
+}))
+
+```
+
+
+```{r cell count to lum v2, fig.height=2, fig.width=8}
+par(mfrow=c(1,3))
+cl <- "H841"
+dtp <- ctrls[[cl]]
+# normalized log2 scale (population doublings)
+invisible(do.call(plotGC, append(getGCargs(dtp, dat.col=c("time","RLU","uid")),
+                                 list(main="H841, lum", leg=FALSE, ylim=c(-1,3)))))
+lines(sumc[sumc$cell.line==cl,"time"], sumc[sumc$cell.line==cl,"popdubs"], lwd=3)
+
+# linear scale (no normalization)
+plot(RLU ~ time, data=dtp, type="n")
+invisible(sapply(unique(dtp$well), function(w) 
+    lines(dtp[dtp$well==w,"time"],dtp[dtp$well==w,"RLU"], col="blue")))
+
+# linear scale, proportional to time 0
+plot(0:200, 0:200, type="n", ylim=c(0,10))
+invisible(sapply(unique(dtp$well), function(w) 
+    lines(dtp[dtp$well==w,"time"],dtp[dtp$well==w,"RLU"]/dtp[dtp$well==w,"RLU"][1], col="blue")))
+```
+
+```{r}
+# log scale (no normalization)
+plot(log2(RLU) ~ time, data=dtp, type="n")
+invisible(sapply(unique(dtp$well), function(w) 
+    lines(dtp[dtp$well==w,"time"],log2(dtp[dtp$well==w,"RLU"]), col="blue")))
+lines(sumc[sumc$cell.line==cl,"time"], sumc[sumc$cell.line==cl,"cell.count"], lwd=3)
+```
+
+
+```{r Lum-only}
+lumo <- read.csv("../data/from_CW_via_Slack_20210507/050819_RTglowDF.csv")
+lumo <- lumo[,-1]
+
+lumo_cell_lines <- unique(lumo$cell.line)
+lumo_ctrl_dat <- lapply(lumo_cell_lines, function(cl) lumo[lumo$cell.line==cl & lumo$drug1.conc==0 & lumo$drug1!="DMSO",])
+names(lumo_ctrl_dat) <- lumo_cell_lines
+```
+
+```{r fig.height=6, fig.width=8}
+par(mfrow=c(2,4))
+
+invisible(lapply(lumo_cell_lines, function(cl)
+{
+    dtp <- lumo_ctrl_dat[[cl]]
+    # plot(dtp$TotHour, dtp$RLU)
+    
+    invisible(do.call(plotGC, append(getGCargs(dtp, dat.col=c("TotHour","RLU","well"), arg.name = c("time", "cell.count", "ids")),
+                                     list(main=cl, leg=FALSE))))
+}))
+```
+
+
+```{r}
+corl279 <- lumo_ctrl_dat[['CORL279']]
+
+a <- subset(corl279, grepl("12", corl279$well) )
+
+invisible(do.call(plotGC, append(getGCargs(a, dat.col=c("TotHour","RLU","well"), arg.name = c("time", "cell.count", "ids")),
+                                     list(main="CORL279", leg=FALSE))))
+```
+
+```{r}
+dms53 <- ctrls[["DMS53"]]
+```
+
+```{r}
+sapply(lag_linear1_models, function(x) coef(x)[1]-coef(x)[2])
+```
+
+```{r}
+par(mfrow=c(2,3))
+
+invisible(lapply(lcc_cell_lines[lcc_cell_lines!="WM88"], function(cl)
+{
+    dtp <- ctrls[[cl]]
+    invisible(do.call(plotGC, append(getGCargs(dtp, dat.col=c("time","RLU","uid")),
+                                     list(main=paste0(cl,", lum"), leg=FALSE, ylim=c(-1,3)))))
+    lines(sumc[sumc$cell.line==cl,"time"], sumc[sumc$cell.line==cl,"popdubs"], lwd=3)
+}))
+invisible(lapply(lcc_cell_lines[lcc_cell_lines!="WM88"], function(cl)
+{
+    dtp <- ctrls[[cl]]
+    plot(log2(RLU) ~ time, data=dtp)
+    lines(sumc[sumc$cell.line==cl,"time"], sumc[sumc$cell.line==cl,"popdubs"], lwd=3)
+}))
+
+```
+
+```{r}
+d <- read.csv("../data/20201216_Lum_Image_Run/20201216_Lum_CellCounts_TOTAL.csv", row.names = 1)
+d$uid <- paste(d$Plate_Name,d$Well,sep="_")
+d <- d[order(d$uid,d$TotHour_Lum),]
+d <- d[d$TotHour_Lum <= 96,]
+# conform all data is same as Thunor
+all(lcc$Cell_Count==d$Cell_Count)
+```
+
+```{r fig.height=2, fig.width=6}
+par(mfrow=c(1,3))
+
+invisible(lapply(lcc_cell_lines[lcc_cell_lines!="WM88"], function(cl)
+{
+    dtp <- d[d$Cell_Line==cl & d$Drug=="AZD-1152", ]
+    invisible(do.call(plotGC, append(getGCargs(dtp, arg.name = c("time", "cell.count", "ids", "rep"), dat.col=c("TotHour_Lum","RLU","uid","Drug_Conc")),
+                                     list(main=paste0(cl,", lum"), ylim=c(-1,3)))))
+}))
+```
+

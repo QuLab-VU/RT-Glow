@@ -129,7 +129,6 @@ names(pn) <- unique(cc$image.time)
 # add plate.name (barcode) to cc
 cc$plate.name <- pn[match(cc$image.time,names(pn))]
 
-
 # must sum cell counts and ch2_pos per uid2 (unique for each time point) 
 cc$uid <- paste(cc$plate.id,cc$well,sep="_")
 cc$uid2 <- paste(cc$uid,cc$plate.id,sep="_")
@@ -138,134 +137,106 @@ cc_temp$cell.count <- sapply(unique(cc$uid2), function(x) sum(cc[cc$uid2==x,'cel
 cc_temp$ch2.pos <- sapply(unique(cc$uid2), function(x) sum(cc[cc$uid2==x,'ch2.pos']))
 
 # time lookup table: cc image times as names, lum file save times as values
-time_lut <- closestTime(unique(cc_temp$image.time),ulfst,direction="before",out="time")
+# time_lut <- closestTime(unique(cc_temp$image.time),ulfst,direction="before",out="time")
 
 # Add luminescence read times; note that the first luminescence read is missing
-cc_temp$lum.time <- time_lut[cc_temp$image.time]
-
+# cc_temp$lum.time <- time_lut[cc_temp$image.time]
+keep_cols <- c("plate.name","image.time","lum.time","well","cell.count","ch2.pos")
 # remove unneeded columns from cc_temp
-cc_temp <- cc_temp[,c("plate.name","image.time","lum.time","well","cell.count","ch2.pos")]
+cc_temp <- cc_temp[,colnames(cc_temp) %in% keep_cols]
 # first plate did not get luminescence read; must pull info from Momentum logs or remove
 cc_temp <- cc_temp[!is.na(cc_temp$plate.name),]
-cc_temp$uid <- paste(cc_temp$plate.name,cc_temp$well,cc_temp$lum.time, sep="_")
+# cc_temp$uid <- paste(cc_temp$plate.name,cc_temp$well,cc_temp$lum.time, sep="_")
 
-lum$uid <- paste(lum$plate.name,lum$well,lum$lum.time, sep="_")
+lum$uid <- paste(lum$lum.time, lum$well, sep="_")
+lum$pid <- paste(lum$plate.name, lum$lum.time, sep="_")
 
-
-
-
-# ml$start.time.rfmt <- strptime(ml$start.time, format="%m/%d/%Y %r")
-# ml$end.time.rfmt <- strptime(ml$end.time, format="%m/%d/%Y %r")
-# ml$image.time <- unique(cc$image.time)[closestTime(ml$start.time.rfmt,unique(cc$image.time))]
-
-
+# keep only unique times for each luminescence read
+lum_times <- lum[!duplicated(lum$pid),]
+lum_times$plate.name <- factor(lum_times$plate.name, 
+                               levels=unique(lum_times$plate.name)[order(lum_times[!duplicated(lum_times$plate.name),"time"])])
+lum_times <- lum_times[order(lum_times$plate.name,lum_times$time),]
 ```
 
 ## NOTE: plate names and times do not match between imaging and lum
-Try to use momentum log to reconcile
+Try to use momentum log to reconcile. This code likely not necessary since already have matched times in `cc_temp`)
+```{r Time matching part 2}
+ml$start.time.rfmt <- strptime(ml$start.time, format="%m/%d/%Y %r")
+ml$end.time.rfmt <- strptime(ml$end.time, format="%m/%d/%Y %r")
+ml$image.time <- unique(cc$image.time)[closestTime(ml$start.time.rfmt,unique(cc$image.time))]
 
+# copy image.time from successive row
+ml[grep("Lum",ml$id),"image.time"] <- ml[grep("Lum",ml$id)+1,"image.time"]
 
-### Stop here
-
-
-#### Not yet incorporated with above
-DO NOT RUN
-
-```{r fig.height=5, fig.width=5}
-cont <- d[d$drug1.conc==0,]
-#do.call(plotGC, getGCargs(cont[cont$well %in% c('B11','C11','D11'),], 
-#                          dat.col = c("time", "cell.count", "well")))
-invisible(do.call(plotGC, getGCargs(cont, 
-                          dat.col = c("time", "cell.count", "well"))))
-
+ml$lum.time <- unique(lum_times$lum.time)[closestTime(ml$end.time.rfmt,unique(lum_times$lum.time))]
+# copy lum.time from preceding row
+ml[grep("RFP",ml$id),"lum.time"] <- ml[grep("RFP",ml$id)-1,"lum.time"]
 ```
 
-# Sum cell counts across wells in same condition 
-To facilitate visualization due to the low cell numbers visible within each field of view. 
+
+
+```{r Add cell counts to lum data}
+cc_temp$lum.time <- ml[match(cc_temp$image.time,ml$image.time),"lum.time"]
+cc_temp$uid <- paste(cc_temp$lum.time, cc_temp$well, sep="_")
+cc_temp <- cc_temp[match(lum$uid,cc_temp$uid),]
+rownames(cc_temp) <- NULL
+
+lum2 <- cbind(lum, cc_temp[,c('cell.count','ch2.pos','image.time')])
+```
+
+## NOTE: first luminescence reading is missing
+
+#### NOTE: in this dataset, luminescence values below ~2000 indistinguishable from background
+
+
+#### Separate data by barcode (cell line)
+Plate barcodes were saved as `plate.name`. Each barcode is associated with a different cell line.
 ```{r}
-d$ucond <- paste(d$drug1,d$drug1.conc,d$time,sep='_')
-a <- d[order(d$ucond),]
-a_counts <- sapply(unique(a$ucond), function(x) sum(a[a$ucond==x,'cell.count']))
-a_counts_ch2 <- sapply(unique(a$ucond), function(x) sum(a[a$ucond==x,'ch2.pos']))
-a <- a[!duplicated(a$ucond),]
-a$cell.count <- a_counts
-a$ch2.pos <- a_counts_ch2
-a <- a[order(a$well,a$time),]
+by_plate <- lapply(unique(lum2$plate.name), function(pn) lum2[lum2$plate.name==pn,])
+names(by_plate) <- unique(lum2$plate.name)
 ```
 
-### Examine control wells
-```{r fig.height=5, fig.width=5}
-cont <- a[a$drug1.conc==0,]
-cont <- cont[order(cont$well,cont$time),]
 
-invisible(do.call(plotGC, getGCargs(cont, 
-                          dat.col = c("time", "cell.count", "well"))))
-```
-
-```{r fig.height=5, fig.width=5}
-invisible(do.call(plotGC, append(getGCargs(a[a$drug1=='TAK-901',], 
-                          dat.col = c("time", "cell.count", "drug1.conc")),
-                          list(main='HEK293 + TAK-901', ylab='Population doublings'))))
-```
-#### Luminescence reads
-Read in data, reformat and replace time with image time for direct comparisons
-```{r}
-lum <- read.csv("../data/HEK293lum.csv", as.is=TRUE)
-lum_time <- lum[,1]
-lum2 <- as.matrix(lum[,-1])
-wells <- fixWellName(colnames(lum)[-1])
-lum <- data.frame(time=rep(unique(d$time)), 
-                       lum=as.vector(lum2), 
-                       well=rep(wells, each=length(unique(d$time))))
-lum$uid <- paste(match(lum$time, unique(lum$time)), lum$well, sep="_")
-lum <- addMapInfo(lum,"../data/201008_185701_Experiment1_platemap.tsv")
-```
-
-```{r}
-lum$ucond <- paste(lum$drug1,lum$drug1.conc,lum$time,sep='_')
-a2 <- lum[order(lum$ucond),]
-a2_lum <- sapply(unique(a2$ucond), function(x) sum(a2[a2$ucond==x,'lum']))
-a2 <- a2[!duplicated(a2$ucond),]
-a2$lum <- a2_lum
-a2 <- a2[order(a2$well,a2$time),]
-```
-
-#### Combine all data
-All data should be aligned by row such that can simply add luminescence reads to cell count data.
-```{r}
-if(all(a$uid==a2$uid)) 
-{
-    a$lum <- a2$lum
-} else {
-    message('Cell count data and luminescence data not aligned!')
+```{r Plot all control wells, fig.height=11, fig.width=8.5}
+par(mfrow=c(4,3))
+for (barcode in names(by_plate)) {
+    cont <- by_plate[[barcode]][by_plate[[barcode]]$drug1.conc==0,]
+    cont <- cont[order(cont$well,cont$time),]
+    if(any(grepl("DMS53",cont$cell.line))) cont <- cont[cont$time <= 48,]
+    cont <- cont[cont$time <= 96,]
+    cl <- unique(cont$cell.line)
+    #do.call(plotGC, getGCargs(cont[cont$well %in% c('B11','C11','D11'),], 
+    #                          dat.col = c("time", "cell.count", "well")))
+    invisible(do.call(plotGC, append(getGCargs(cont,
+                              dat.col = c("time", "cell.count", "well")),list(main=paste(cl,"cell count doublings")))))
+    invisible(do.call(plotGC, append(getGCargs(cont,
+                              dat.col = c("time", "rlu", "well")),list(main=paste(cl,"lum doublings")))))
+    invisible(do.call(plotGC, append(getGCargs(cont,
+                              dat.col = c("time", "rlu", "well")),list(main=paste(cl,"lum"),count.type = "log"))))    
 }
+
 ```
 
+### Clayton's heuristic
+Clayton Wandishin states that the relationship between luminscence and cell count can be explained by the following mathematical model:
+
+`1 = d/dx(log2(J*Lum))`  
+
+
 ```{r}
-plot(a$cell.count, a$lum)
-```
-#### Only control wells exhibiting clear exponential growth
-By visual inspection of cell count growth curves, combined wells B11, C11 and D11 (saved into B11) demonstrated exponential growth after ~60 h. Use
-```{r fig.height=4, fig.width=4}
-a2 <- a[a$well=="B11",]
-plot(lum ~ cell.count, data=a2, 
-     xlab="Cell count", ylab="Luminescence", main="HEK293 control wells")
-```
-Correlation of luminescence to cell counts in control wells
-```{r}
-round(cor(a2$cell.count,a2$lum),4)
+my_lum <- lum2[lum2$time <= 96,c('cell.line','time','rlu')]
+dms53 <- my_lum[my_lum$cell.line=="DMS53" & my_lum$time <= 48,]
+my_lum <- rbind(my_lum[my_lum$cell.line!="DMS53",],dms53)
+
+j <- c(H1048=18,H841=14,DMS53=12)
 ```
 
-### Save combined data file
-Only save if file does not already exist.
-```{r}
-dfn <- "../data/2020-10-08_Cytation_data_sum_by_condition.csv"
-if(!file.exists(dfn)) write.csv(a, file=dfn, row.names=FALSE)
-```
-Also save data with all wells included
-```{r}
-d$lum <- lum$lum
-cfn <- "../data/2020-10-08_Cytation_data_counts+lum.csv"
-if(!file.exists(cfn)) write.csv(d, file=dfn, row.names=FALSE)
+```{r fig.height=3, fig.width=8.5}
+par(mfrow=c(1,3))
+invisible(lapply(names(j), function(n) {
+    dat <- my_lum[my_lum$cell.line==n,]
+    plot(dat$time,log2(dat$rlu)*dat$time/j[n])
+}
+))
 ```
 
