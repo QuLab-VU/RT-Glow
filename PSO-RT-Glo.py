@@ -176,6 +176,3 @@ def run_example():
         plt.ylabel('Luminescence')
 
     plt.show()
-
-
-run_example()
