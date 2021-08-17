@@ -71,8 +71,6 @@ def run_pso(lum, drug_conc, time):
     )
 
 
-##################################################
-
 def run_example():
 
     # EXAMPLE: CREATE SOME SYNTHETIC DATA
