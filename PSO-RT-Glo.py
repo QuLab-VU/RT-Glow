@@ -1,7 +1,10 @@
 import matplotlib.pyplot as plt
+from matplotlib import cm
 import numpy as np
 from scipy.stats import linregress
 from simplepso.pso import PSO
+
+cmap = cm.get_cmap('coolwarm')
 
 sse_list = []
 a_list = []
@@ -11,17 +14,17 @@ c_list = []
 
 def cost(params):
 
-    a = params[0]
-    b = params[1]
-    c = params[2]
+    a = params[0]  # kdiv-kdeath
+    b = params[1]  # kdiv*-kdeath*
+    c = params[2]  # koff/kon
 
-    sse = np.empty(len(_drug_conc), dtype=object)
+    sse = np.empty(len(_drug_conc), dtype=object)  # sum of squared errors
 
     for i, d in enumerate(_drug_conc):
         traj = np.maximum(
             _nC0 * (1 - np.exp(a * _time[i])) + _m * _time[i] + _nC0 * np.exp(((c * a + d * b) / (c + d)) * _time[i]),
             np.zeros(len(_time[i])))
-        sse[i] = sum((_lum[i] - traj) ** 2)
+        sse[i] = sum(_weights[i] * (_lum[i] - traj) ** 2)
 
     #####
     sse_list.append(sum(sse))
@@ -33,13 +36,29 @@ def cost(params):
     return sum(sse)
 
 
-def run_pso(lum, drug_conc, time):
+def run_pso(lum, drug_conc, time, weights):
 
     # create global versions of lum, drug_conc, and time variables that can be used in cost function
-    global _lum, _drug_conc, _time
+    global _lum, _drug_conc, _time, _weights
     _lum = np.array(lum)
     _drug_conc = np.array(drug_conc)
     _time = np.array(time)
+    _weights = np.array(weights)
+
+    ##########
+    # _dc, idx = np.unique(_drug_conc, return_index=True)
+    # _lum_avg = np.array([np.mean(_lum[idx[i]:idx[i+1]], axis=0) for i in range(len(idx)-1)] +
+    #                     [np.mean(_lum[idx[-1]:], axis=0)])
+    # colors = cmap(np.linspace(0, 1, len(_dc)))
+    # plt.figure()
+    # u_idx = 0
+    # for i in range(len(_lum)):
+    #     if i <= idx[-1] and i == idx[u_idx+1]:
+    #         u_idx += 1
+    #     plt.plot(_time[i], _lum[i], 'o', color=colors[u_idx])
+    #     plt.plot(_time[idx[u_idx]], _lum_avg[u_idx], '--', lw=2, color=colors[u_idx])
+    # plt.show()
+    ##########
 
     # estimate slope m and y-intercept nC0 from control luminescence data
     global _m, _nC0
@@ -62,13 +81,15 @@ def run_pso(lum, drug_conc, time):
     # sets maximum speed that a particle can travel
     pso.set_speed(-0.1, 0.1)
     pso.run(
-        num_particles=1,
+        num_particles=100,
         num_iterations=1000,
         stop_threshold=0,
         num_processors=1,
-        max_iter_no_improv=100,
+        max_iter_no_improv=1000,
         cost_function=cost
     )
+
+    return np.array([_m, _nC0] + list(pso.best.pos))  # [m, nC0, kdiv-kdeath, kdiv*-kdeath*, koff/kon]
 
 
 def run_example():
