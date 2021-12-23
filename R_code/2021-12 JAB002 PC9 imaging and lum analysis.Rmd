@@ -1,0 +1,114 @@
+---
+title: "Cytation RT-glo JAB"
+output: html_notebook
+author: Darren Tyson
+date: December 22, 2021
+---
+
+```{r Setup}
+library(diprate)
+```
+
+## Cell counts extracted using updated `py-seg`
+Experiment performed on PC9.1 (PC9 H2BmRFP.1) cells at varying seeding densities with imaging and luminescence reads performed on the Cytation 5 in the HTS core starting on 2021-12-07 and finishing 2021-12-10.  
+
+Image segmentation using `py-seg` had to be modified to account for lower spatial resolution of camera in Cytation 5 in HTS core. Monica ran NextFlow processing on data saved in `/vu1file/quaranta2/Cytation`. Files were copied into RT-Glow git repo.
+
+## Load cell count data
+```{r}
+d <- read.csv("../data/2021-12-07_JAB002_PC9.1/cellCounts_JAB002.csv", row.names=1)
+d <- d[order(d$plate_id,d$well),]
+rownames(d) <- NULL
+d$pos <- sapply(sapply(d$file_name, function(x) strsplit(x,"_")), "[[", 4)
+d$uid <- paste(d$plate_id,d$well,sep="_")
+
+# add up all counts in each well at each timepoint
+a <- aggregate(cell_count ~ uid, data=d, FUN=sum)
+a$plate_id <- sapply(strsplit(a$uid, "_"), "[[", 1)
+a$well <- sapply(strsplit(a$uid, "_"), "[[", 2)
+```
+
+## Load plate map and clean
+```{r}
+pm <- read.csv("../data/2021-12-07_JAB002_PC9.1/Platemap2-JAB002.csv", skip=1)
+pm <- pm[1:16,1:25]
+rownames(pm) <- pm[,1]
+pm <- pm[,-1]
+colnames(pm) <- as.character(1:24)
+pm <- apply(pm, c(1,2), function(x) ifelse(x=="NULL",NA, gsub("c","",x)))
+pm <- data.frame(seed.dens=matrix(pm, ncol=1))
+
+wellnames <- fixWellName(sapply(LETTERS[1:16], function(x) paste0(x,1:24)))
+pm$well <- wellnames[order(as.integer(gsub("[A-P]","",wellnames)))]
+
+# capture positions of nonempty wells
+well_i <- which(!is.na(pm$seed.dens))
+
+pm <- pm[!is.na(pm$seed.dens),c("well","seed.dens")]
+rownames(pm) <- NULL
+```
+
+**NOTE:** Plate was rotated 180deg on first time point: should correct well names of data
+```{r}
+rotated_wells <- rev(wellnames)[order(as.integer(gsub("[A-P]","",wellnames)))][well_i]
+names(rotated_wells) <- wellnames[order(as.integer(gsub("[A-P]","",wellnames)))][well_i]
+
+a[a$plate_id==1,"well"] <- rotated_wells[a[a$plate_id==1,"well"]]
+
+# fix uids
+a$uid <- paste(a$plate_id, a$well, sep="_")
+```
+
+**NOTE:** Plate map only shows initial expected seeding densities. All cells are PC9.1  
+
+## Apply plate map info to data
+
+```{r}
+a$drug1 <- pm[match(a$well,pm$well),"seed.dens"]
+a$drug1.conc <- 0
+```
+
+## Pull times from expt directory names
+Need to parse times from directory names (first part)  
+Copied `getDateTime` function from `2020-12-14_Cytation_analysis.Rmd`
+```{r}
+getDateTime <- function(dname)
+{
+    o <- dname[grepl("[0-9]{6}_*[0-9]{6}",dname)]
+    if(all(grepl("[0-9]{12}",o)))
+    {
+        mytime <- strptime(o, '%y%m%d%H%M%S')
+    } else {
+        mytime <- paste(sapply(strsplit(o,'_'), '[[', 1),
+            sapply(strsplit(o,'_'), '[[', 2), sep='_')
+        mytime <- strptime(mytime, '%y%m%d_%H%M%S')
+    }
+    names(mytime) <- NULL
+    return(mytime)
+}
+```
+
+
+```{r}
+temp_times <- read.table("../data/2021-12-07_JAB002_PC9.1/expt_dirs.txt")[,1]
+# temp_times <- sapply(strsplit(temp_times,"_"), "[[", 1)
+temp_times <- lapply(temp_times, getDateTime)
+a$image.time <- sapply(temp_times[as.integer(a$plate_id)], as.character)
+TxTime <- "2021-12-07 13:00:00"
+a$time <- signif(as.numeric(difftime(a$image.time, TxTime, units="hours")),3)
+colnames(a)[colnames(a)=="cell_count"] <- "cell.count"
+
+a <- a[order(a$well, a$time),]
+a$uid <- a$well
+```
+
+
+```{r fig.height=6, fig.width=8}
+par(mfrow=c(2,4))
+temp <- lapply(unique(a$drug1), function(drug) 
+{
+    dtp <- a[a$drug1==drug,]
+    invisible(do.call(plotGC, append(getGCargs(dat=dtp), list(main=paste("Seed Dens",drug), ylim=c(0,4)))))
+})
+```
+    
