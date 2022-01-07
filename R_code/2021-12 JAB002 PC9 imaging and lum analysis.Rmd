@@ -112,3 +112,15 @@ temp <- lapply(unique(a$drug1), function(drug)
 })
 ```
     
+
+## Luminescence reads
+Load all luminescence reads (complete set transferred into `data` directory 2022-01-07) and compare to cell counts.
+
+```{r Read lum files}
+lum_filenames <- list.files("../data/2021-12-07_JAB002_PC9.1/Lumi_reads", full.names=TRUE)
+lum_filenames <- lum_filenames[grep(".xls",lum_filenames)]
+l <- lapply(lum_filenames, function(f) readxl::read_xls(f, skip=47)[1:16,1:25])
+```
+
+
+
