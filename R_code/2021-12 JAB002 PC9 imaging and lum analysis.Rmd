@@ -99,16 +99,18 @@ a$time <- signif(as.numeric(difftime(a$image.time, TxTime, units="hours")),3)
 colnames(a)[colnames(a)=="cell_count"] <- "cell.count"
 
 a <- a[order(a$well, a$time),]
-a$uid <- a$well
 ```
 
-
+To facilitate plotGC function call, use `well` as `uid`.
 ```{r fig.height=6, fig.width=8}
+a$uid <- a$well
+
 par(mfrow=c(2,4))
 temp <- lapply(unique(a$drug1), function(drug) 
 {
     dtp <- a[a$drug1==drug,]
-    invisible(do.call(plotGC, append(getGCargs(dat=dtp), list(main=paste("Seed Dens",drug), ylim=c(0,4)))))
+    invisible(do.call(plotGC, append(getGCargs(dat=dtp), 
+                                     list(main=paste("Seed Dens",drug), ylim=c(0,4)))))
 })
 ```
     
@@ -116,11 +118,152 @@ temp <- lapply(unique(a$drug1), function(drug)
 ## Luminescence reads
 Load all luminescence reads (complete set transferred into `data` directory 2022-01-07) and compare to cell counts.
 
-```{r Read lum files}
+```{r}
+parseLumFile <- function(lum_file_path)
+{
+    temp <- readxl::read_xls(lum_file_path)
+    # determine which row contains "Results" and add 3 (rows to skip on read)
+    skip_to_row <- which(temp[,1]=="Results" & !is.na(temp[,1])) + 3
+    if(length(skip_to_row) != 1 & class(skip_to_row) != "integer" ) 
+    {
+        message(cat("Could not find 'Results' in",
+                    basename(lum_file_path)))
+        return(NA)
+    }
+    out <- readxl::read_xls(lum_file_path, skip=skip_to_row)[1:16,1:25]
+    out <- as.data.frame(out)
+    rownames(out) <- out[,1]
+    out <- out[,-1]
+    out <- as.matrix(out)
+    return(out)
+}
+
+closestTime <- function (mytime, timevec, direction = "", out = "pos")
+{
+    sapply(mytime, function(mt) 
+    {
+        difft <- switch(direction,
+                        before = -difftime(timevec, mt),
+                        after = -difftime(mt, timevec),
+                        abs(difftime(mt, timevec))
+                        )
+        if(direction %in% c("before","after"))
+        {
+            mindiff = ifelse(length(difft[difft>=0]) == 0, NA, min(difft[difft>=0]))
+            if(is.na(mindiff))
+            {
+                r <- NA
+            } else {
+                r <- as.vector(switch(out,
+                                      time = timevec[which(difft == min(difft[difft>=0]) )],
+                                      pos = which(difft == min(difft[difft>=0])),
+                                      amt = min(difft[difft>=0])
+                                      )
+                               )
+            }
+        } else {
+            r <- switch(out,
+                        time = as.character(timevec[which(difft == min(difft))]),
+                        pos = which(difft == min(difft)),
+                        amt = min(difft)
+                        )
+        }
+        return(r)
+    })
+}
+```
+
+```{r Read lum files, message=FALSE, warning=FALSE}
 lum_filenames <- list.files("../data/2021-12-07_JAB002_PC9.1/Lumi_reads", full.names=TRUE)
 lum_filenames <- lum_filenames[grep(".xls",lum_filenames)]
-l <- lapply(lum_filenames, function(f) readxl::read_xls(f, skip=47)[1:16,1:25])
+```
+
+### Hiding output due to many extraneous messages
+Running code:  
+
+`l <- lapply(lum_filenames, parseLumFile)`
+
+```{r include=FALSE}
+l <- lapply(lum_filenames, parseLumFile)
+```
+
+NOTE: Format of lum read files changed for 15th and 25th time points! 
+
+```{r}
+z <- data.frame(well=wellnames[order(as.integer(gsub("[A-P]","",wellnames)))])
+z <- cbind(z,do.call(cbind,lapply(l, function(x) matrix(x, ncol=1))))
+z <- z[order(z$well),]
+z <- z[apply(z,1,function(x) !all(is.na(x[-1]))),]
+```
+### Reverse the order of the first plate
+```{r}
+z[,1] <- rev(z[,1])
 ```
 
 
+### Extract time of luminescence reads from filenames
+```{r}
+lum_times <- gsub("RT-GLO_RFP_PC9_opt-JB_","",basename(lum_filenames))
+lum_times <- gsub("_NC211207155717.675_PE_.xls","",lum_times)
+lum_times <- strptime(lum_times, format="%Y%m%d_%H%M%S")
+
+image_times <- unique(a$image.time)
+```
+
+### Find corresponding times between images and luminescence
+```{r}
+closestTime(lum_times, image_times, out="amt")
+```
+Should exclude last four reads. All others match imaging times.
+
+```{r}
+rownames(z) <- z$well
+z <- z[,-1]
+z <- z[,colnames(z) %in% 1:40]
+z <- z[order(rownames(z)),]
+```
+
+
+```{r}
+a$uid <- paste(a$plate_id, a$well, sep="_")
+a <- a[order(a$plate_id,a$well),]
+a$lum <- sapply(a$uid, function(id) {
+    plate_id <- strsplit(id, "_")[[1]][[1]]
+    well <- strsplit(id, "_")[[1]][[2]]
+    z[well,plate_id][1]
+})
+```
+
+
+```{r}
+a$uid <- a$well
+a <- a[order(a$uid,a$time),]
+```
+
+### Try throwing out first time point
+
+```{r fig.height=6, fig.width=8}
+b <- a[a$plate_id != 1,]
+
+par(mfrow=c(2,4))
+temp <- lapply(unique(b$drug1), function(drug) 
+{
+    dtp <- b[b$drug1==drug,]
+    invisible(do.call(plotGC, append(getGCargs(dat=dtp,
+                                               arg.name = c("time", "cell.count", "ids"),
+                                               dat.col = c("time", "lum", "uid")), 
+                                     list(main=paste("Lum, seed dens",drug)))))
+})
+```
+
+### Replot cell counts for comparison
+```{r fig.height=6, fig.width=8}
+par(mfrow=c(2,4))
+temp <- lapply(unique(a$drug1), function(drug) 
+{
+    dtp <- a[a$drug1==drug,]
+    invisible(do.call(plotGC, append(getGCargs(dat=dtp), 
+                                     list(main=paste("Cell count, seed dens",drug), ylim=c(0,4)))))
+})
+```
 
