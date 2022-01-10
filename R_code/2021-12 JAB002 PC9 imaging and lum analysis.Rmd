@@ -252,18 +252,21 @@ temp <- lapply(unique(b$drug1), function(drug)
     invisible(do.call(plotGC, append(getGCargs(dat=dtp,
                                                arg.name = c("time", "cell.count", "ids"),
                                                dat.col = c("time", "lum", "uid")), 
-                                     list(main=paste("Lum, seed dens",drug)))))
+                                     list(main=paste("Lum, seed dens",drug),
+                                          ylim=c(0,4), ylab="Lum doublings"
+                                          ))))
 })
 ```
 
 ### Replot cell counts for comparison
 ```{r fig.height=6, fig.width=8}
 par(mfrow=c(2,4))
-temp <- lapply(unique(a$drug1), function(drug) 
+temp <- lapply(unique(b$drug1), function(drug) 
 {
-    dtp <- a[a$drug1==drug,]
+    dtp <- b[b$drug1==drug,]
     invisible(do.call(plotGC, append(getGCargs(dat=dtp), 
-                                     list(main=paste("Cell count, seed dens",drug), ylim=c(0,4)))))
+                                     list(main=paste("Cell count, seed dens",drug),
+                                          ylim=c(0,4), ylab="Population doublings"))))
 })
 ```
 
