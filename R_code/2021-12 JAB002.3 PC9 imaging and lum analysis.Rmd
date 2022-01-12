@@ -1,0 +1,71 @@
+---
+title: "JAB002.3 lum & cell count analysis"
+output: html_notebook
+---
+
+## RealTime-Glo vs direct cell counts via fluorescence microscopy
+Analysis of PC9.1 cells treated with multiple drugs and drug concentrations using RT-glo
+```{r}
+library(diprate)
+
+# New function to correct time format
+fixTime <- function(...) strptime(format="%m-%d-%Y %I:%M %p", ...)
+
+d <- read.csv("~/dropbox-vu/temp/lum_cellcount_JAB002-3.csv", row.names=1)
+```
+
+## Clean up data
+```{r}
+d[d$drug_conc == "NaN", "drug_conc"] <- NA
+d$drug_conc <- as.numeric(d$drug_conc)
+d[d$drug == "", "drug"] <- NA
+
+cn <- colnames(d)
+
+cn <- gsub("drug_", "drug1.", cn)
+cn <- gsub("drug$", "drug1", cn)
+cn <- gsub("_", ".", cn)
+colnames(d) <- cn
+
+d[is.na(d$drug1.conc), "drug1.conc"] <- 0
+
+TxTime <- fixTime(min(d$image.time))
+d$time <- signif(as.numeric(difftime(fixTime(d$image.time), TxTime, units="hours")),2)
+d <- d[order(d$well,d$time),]
+d$uid <- d$well
+rownames(d) <- NULL
+```
+
+
+```{r}
+ctrl <- d[d$drug1.conc==0,]
+```
+
+```{r fig.height=6, fig.width=6}
+temp <- plotGC(ctrl$time, ctrl$cell.count, ctrl$well, main="Cell counts")
+```
+
+```{r fig.height=6, fig.width=6}
+temp <- plotGC(ctrl$time, ctrl$RLU, ctrl$well, main="Luminescence")
+```
+
+
+
+```{r}
+plot(RLU ~ cell.count, data=ctrl)
+```
+
+
+```{r}
+drugs <- unique(d$drug1)
+drugs <- drugs[!is.na(drugs)]
+
+a <- lapply(drugs, function(dr) d[d$drug1==dr & !is.na(d$drug1),])
+```
+
+
+```{r fig.height=8, fig.width=8}
+par(mfrow=c(3,3))
+temp <- lapply(a, function(z) do.call(plotGC, append(getGCargs(z), list(rep=z$drug1.conc, main=unique(z$drug1)))))
+```
+
