@@ -4,11 +4,16 @@ output: html_notebook
 ---
 
 ## RealTime-Glo vs direct cell counts via fluorescence microscopy
-Analysis of PC9.1 cells treated with multiple drugs and drug concentrations using RT-glo
+Analysis of PC9.1 cells treated with multiple drugs and drug concentrations using RT-glo.
+
+Columns 3-22 have RT-glo, other do not.  
+O13-22 should be controls.
 ```{r}
 library(diprate)
 
 # New function to correct time format
+# Example time: 12-17-2021 5:22 PM
+
 fixTime <- function(...) strptime(format="%m-%d-%Y %I:%M %p", ...)
 
 d <- read.csv("~/dropbox-vu/temp/lum_cellcount_JAB002-3.csv", row.names=1)
@@ -30,15 +35,18 @@ colnames(d) <- cn
 d[is.na(d$drug1.conc), "drug1.conc"] <- 0
 
 TxTime <- fixTime(min(d$image.time))
-d$time <- signif(as.numeric(difftime(fixTime(d$image.time), TxTime, units="hours")),2)
+d$time <- signif(as.numeric(difftime(fixTime(d$image.time), TxTime, units="hours")),3)
 d <- d[order(d$well,d$time),]
 d$uid <- d$well
 rownames(d) <- NULL
+
+# drop first two time points
+d <- d[d$plate.id > 2,]
 ```
 
 
 ```{r}
-ctrl <- d[d$drug1.conc==0,]
+ctrl <- d[d$well %in% paste0("O",13:22),]
 ```
 
 ```{r fig.height=6, fig.width=6}
@@ -69,3 +77,42 @@ par(mfrow=c(3,3))
 temp <- lapply(a, function(z) do.call(plotGC, append(getGCargs(z), list(rep=z$drug1.conc, main=unique(z$drug1)))))
 ```
 
+```{r fig.height=8, fig.width=8}
+par(mfrow=c(3,3))
+temp <- lapply(a, function(z) do.call(plotGC, append(getGCargs(z, 
+                                                               arg.name = c("time", "cell.count", "ids"), 
+                                                               dat.col = c("time", "RLU", "uid")), 
+                                      list(rep=z$drug1.conc, main=unique(z$drug1)))))
+```
+
+```{r}
+plotLin <- function (x, y, ids, rep = ids, color = TRUE, leg = TRUE, ...) 
+{
+    urep <- unique(rep)
+    ifelse(color, rep.col <- gplots::colorpanel(n = length(urep), 
+        low = "blue", mid = "orange", high = "red"), rep.col <- rep("black", 
+        length(urep)))
+    plot(x, y, type = "n", ...)
+    for (myrep in urep) for (i in unique(ids)) 
+        lines(x[ids == i & rep == myrep], 
+              y[ids == i & rep == myrep], 
+              col = rep.col[match(myrep, urep)])
+    if (leg) 
+        legend("topleft", legend = urep, col = rep.col, lwd = 1)
+    return(NULL)
+}
+```
+
+```{r fig.height=8, fig.width=8}
+par(mfrow=c(3,3))
+temp <- lapply(a, function(z) do.call(plotLin, list(x=z$time, y=log2(z$cell.count+1), ids=z$well, 
+                                                    rep=z$drug1.conc, main=unique(z$drug1),
+                                                    ylab="log2(cell count)")))
+```
+
+```{r fig.height=8, fig.width=8}
+par(mfrow=c(3,3))
+temp <- lapply(a, function(z) do.call(plotLin, list(x=z$time, y=log2(z$RLU), ids=z$well, 
+                                                    rep=z$drug1.conc, main=unique(z$drug1),
+                                                    ylab="log2(RLU)")))
+```
