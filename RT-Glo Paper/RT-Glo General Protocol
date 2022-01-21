@@ -1,0 +1,36 @@
+RT-Glo General Protocol
+
+Reagents required:
+	RealTime-Glo MT Cell Viability Assay (Promega G9711)
+	Cells in log-phase culture
+	Culture Medium
+Sytox or CellTox Green (ThermoFisher S7020 or Promega G8741) *optional* 
+
+
+Reagent Preparation:
+
+1.	Prepare MT Viability Substrate and NanoLuc Luciferase from kit by moving from  -80˚C or -20˚C to room temperature under cover (light sensitive) for at least 70 minutes before moving to 37˚C to equilibrate for 10-30 min
+2.	Simultaneuously, prepare culture medium by warming to 37˚C
+a.	IT IS EXTREMELY IMPORTANT THAT THE MT SUBSTRATE, NANOLUC LUCIFERASE, AND CULTURE MEDIUM ARE ALL AT 37˚C DURING SOLUBILIZATION TO AVOID CRYSTALLIZATION OF MT SUBSTRATE
+NOTE: The following volumes are to create a 1X RT-Glo medium.  Up to a 5X concentration can be prepared if desired and the prepared medium is stable for up to two weeks from preparation at 4˚C (including assay length) but will require re-warming and vortexing to completely re-dissolve components.
+3.	Pipette 25mL culture medium in to a 50 mL Falcon tube
+a.	Optional: Supplement with 20uL 1000X Sytox Green or CellTox Green
+4.	Pipette 950uL culture medium from the 50 mL falcon tube and slowly use it to resuspend the MT Substrate (10uL) [1000x] by gentle pipetting before adding back in to the 50 mL Falcon Tube
+5.	Invert Falcon Tube 3-5 Times and repeat step 4 (20uL total of MT substrate will be added to 25mL of culture media)
+6.	Vortex the 50mL Falcon tube for at LEAST 45 seconds
+7.	Place in Dry Bath at 37˚C until ready to use [4 hours max] or store at 4˚C for up to two weeks (including assay length) 
+
+Protocol:
+
+1.	Add cells at desired culture density appropriate for the assay length so that confluency is not reached to pre-warmed RT-Glo medium (supplemented with Sytox or CellTox green if desired)
+a.	Alternatively, if cells have already been plated, aspirate medium and add 1X RT-Glo medium [Or aspirate a fractional portion of medium and add 1.5-5X RT-Glo medium]
+2.	Plate cells
+3.	Let plate incubate for 30 minutes at 37˚C before beginning to measure luminescence (and fluorescence if supplemented with Sytox or CellTox green)
+4.	Measure plate at desired intervals across the length of the assay, making sure that the measurements are done in a plate reader with the ability to incubate at 37˚C, this is Imperative for clean and accurate luminescence data
+a.	Recommended: Add a minimum of 5 minutes delay within a pre-incubated plate reader so the plate has a chance to equilibrate before being read
+b.	Assays requiring media change:  If an assay length is such that it requires changing of culture medium, it is recommended that only a fractional medium changed is performed to reduce noise across the duration of the experiment.  
+i.	If medium must be exchanged do not exchange at an interval >72 hours if at all possible
+1.	Results may vary but if this is not possible, further optimization may need to be performed to ensure that MT substrate in culture is not depleted between medium changes (you might have to add more MT substrate initially)
+5.	When the assay is complete, determine the basal luminescence rate of the undrugged controls by taking the slope of the luminescence from the assay onset until either the end of the assay, or the maximum luminescent signal; whichever is first.
+6.	To determine the luminescent rates of drugged conditions, first constrain all drugged luminescent timepoints to the final timepoint used in determining the basal rate.  Next, if the final timepoint is the maximum luminescent measurement for that condition, determine the rate by taking the slope.  If the final timepoint is not the maximum, constrain the slope determination to the region between the maximum luminescence measurement and the endpoint of the basal luminescence rate.
+a.	If Sytox or CellTox green were added, additional information on the cytotoxicity over time can be also analyzed
