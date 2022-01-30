@@ -1,0 +1,24 @@
+---
+title: "Reformatting fit values for Clayton"
+output: html_notebook
+---
+
+### extracted DRC fit values from Clayton
+Too many significant digits.
+
+```{r}
+d <- read.csv("../data/FitCoefficientResultsTotal.csv", row.names=1)
+head(d)
+```
+
+```{r}
+d[,c("Hill.Coefficient","Minimum.Response","EC50","residuals","logEC50")] <- 
+    apply(d[,c("Hill.Coefficient","Minimum.Response","EC50","residuals","logEC50")],
+          c(1,2), 
+          function(x) signif(x,3)        
+          )
+
+head(d)
+```
+
+
